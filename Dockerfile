@@ -84,8 +84,8 @@ COPY --from=prod-deps /app/bindings.sh /app/bindings.sh
 RUN mkdir -p /root/.config/.wrangler && \
     echo '{"enabled":false}' > /root/.config/.wrangler/metrics.json
 
-# Make bindings script executable
-RUN chmod +x /app/bindings.sh
+# Fix line endings and make bindings script executable
+RUN sed -i 's/\r$//' /app/bindings.sh && chmod +x /app/bindings.sh
 
 EXPOSE 5173
 
