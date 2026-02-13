@@ -1609,6 +1609,13 @@ def chat():
         if not session_id: return jsonify({'error': 'Session ID missing'}), 400
 
         username = session.get('username')
+
+        # FALLBACK MODE: Simple chat without DB
+        if db_pool is None:
+            print(f"💬 Fallback chat mode - User: {username}", flush=True)
+            # Return error message for now
+            return jsonify({'error': 'Database unavailable - Chat temporarily disabled'}), 503
+
         conn = get_db_connection()
 
         # 0. CHECK CREDITS OR SUBSCRIPTION
