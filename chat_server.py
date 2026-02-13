@@ -82,14 +82,19 @@ except ImportError:
 
 app = Flask(__name__, static_folder='chat_interface')
 
-# SECURITY: Restrict CORS to localhost to prevent external sites from accessing the API
-CORS(app, resources={r"/api/*": {"origins": ["http://127.0.0.1:5000", "http://localhost:5000"]}})
+# SECURITY: Restrict CORS to allowed origins
+CORS(app, resources={r"/api/*": {"origins": [
+    "http://127.0.0.1:5000",
+    "http://localhost:5000",
+    "https://vif.lat",  # Production domain
+    "https://*.railway.app"  # Railway preview deployments
+], "supports_credentials": True}})
 
 # SECURITY: Hardened Cookie Settings
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    SESSION_COOKIE_SECURE=False,  # Set to True if using HTTPS
+    SESSION_COOKIE_SECURE=True,  # Required for HTTPS (Railway deployment)
     MAX_CONTENT_LENGTH=16 * 1024 * 1024 # Limit uploads to 16MB (DoS Protection)
 )
 
