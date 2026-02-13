@@ -186,18 +186,22 @@ def init_pool():
                 2, 8, DATABASE_URL,
                 connect_timeout=10
             )
-            print("✅ Database connection pool initialized")
+            print("✅ Database connection pool initialized", flush=True)
+            sys.stdout.flush()
 
             # Initialize MCP Manager with database pool
             try:
                 mcp_manager = MCPManager(db_pool)
-                print("🚀 MCP Manager initialized successfully")
+                print("🚀 MCP Manager initialized successfully", flush=True)
+                sys.stdout.flush()
             except Exception as e:
-                print(f"❌ Failed to initialize MCP Manager: {e}")
+                print(f"❌ Failed to initialize MCP Manager: {e}", flush=True)
+                sys.stdout.flush()
 
         except Exception as e:
-            print(f"⚠️ Database connection failed (will retry): {e}")
-            print("⚠️ Application starting without database - some features unavailable")
+            print(f"⚠️ Database connection failed (will retry): {e}", flush=True)
+            print("⚠️ Application starting without database - some features unavailable", flush=True)
+            sys.stdout.flush()
             db_pool = None
             mcp_manager = None
 
@@ -248,13 +252,24 @@ def init_db():
         conn.close()
 
 # Initialize database pool with error handling
+print("🔄 Initializing Vif Chat Server...", flush=True)
+sys.stdout.flush()
+
 try:
     init_pool()
     if db_pool:
+        print("📊 Initializing database schema...", flush=True)
+        sys.stdout.flush()
         init_db()
+        print("✅ Vif Server initialization complete!", flush=True)
+        sys.stdout.flush()
+    else:
+        print("⚠️ Running without database (degraded mode)", flush=True)
+        sys.stdout.flush()
 except Exception as e:
-    print(f"⚠️ Startup error: {e}")
-    print("⚠️ Server starting in degraded mode")
+    print(f"⚠️ Startup error: {e}", flush=True)
+    print("⚠️ Server starting in degraded mode", flush=True)
+    sys.stdout.flush()
 
 def log_system_event(level, message):
     """Log a system event to the database for admin dashboard."""
