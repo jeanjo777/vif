@@ -1180,6 +1180,10 @@ def terminal():
 def register_page():
     return send_from_directory('chat_interface', 'register.html')
 
+@app.route('/debug.html')
+def debug_page():
+    return send_from_directory('chat_interface', 'debug.html')
+
 @app.route('/<path:path>')
 @login_required # SECURED
 def static_files(path):

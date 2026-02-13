@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VIF Debug</title>
+    <style>
+        body {
+            background: #0a0a0a;
+            color: #00ff00;
+            font-family: monospace;
+            padding: 20px;
+        }
+        .status { margin: 10px 0; }
+        .ok { color: #00ff00; }
+        .error { color: #ff0000; }
+    </style>
+</head>
+<body>
+    <h1>VIF DEBUG PAGE</h1>
+    <div id="results"></div>
+    <script>
+        async function checkStatus() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<div class="status">Checking...</div>';
+
+            try {
+                // Test 1: Check if logged in
+                const indexResponse = await fetch('/', { redirect: 'manual' });
+                results.innerHTML += `<div class="status">GET / : ${indexResponse.status} ${indexResponse.statusText}</div>`;
+
+                // Test 2: Check terminal
+                const terminalResponse = await fetch('/terminal', { redirect: 'manual' });
+                results.innerHTML += `<div class="status">GET /terminal : ${terminalResponse.status} ${terminalResponse.statusText}</div>`;
+
+                // Test 3: Check session cookies
+                results.innerHTML += `<div class="status">Cookies: ${document.cookie || 'NONE'}</div>`;
+
+                // Test 4: Try to get sessions
+                const sessionsResponse = await fetch('/api/sessions');
+                const sessionsData = await sessionsResponse.json();
+                results.innerHTML += `<div class="status ${sessionsResponse.ok ? 'ok' : 'error'}">Sessions API: ${JSON.stringify(sessionsData)}</div>`;
+
+            } catch (e) {
+                results.innerHTML += `<div class="status error">Error: ${e.message}</div>`;
+            }
+        }
+
+        checkStatus();
+    </script>
+</body>
+</html>
