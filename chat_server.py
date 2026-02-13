@@ -181,9 +181,21 @@ def init_pool():
     global db_pool, mcp_manager
     if DATABASE_URL:
         try:
+            # Force IPv4 resolution to avoid Railway IPv6 incompatibility
+            connection_url = DATABASE_URL
+            if 'db.hyjzufgsjbyfynlliuia.supabase.co' in DATABASE_URL:
+                try:
+                    import socket
+                    # Force IPv4 by using AF_INET
+                    ipv4_addr = socket.getaddrinfo('db.hyjzufgsjbyfynlliuia.supabase.co', 5432, socket.AF_INET)[0][4][0]
+                    connection_url = DATABASE_URL.replace('db.hyjzufgsjbyfynlliuia.supabase.co', ipv4_addr)
+                    print(f"🔄 Resolved to IPv4: {ipv4_addr}", flush=True)
+                except Exception as dns_err:
+                    print(f"⚠️ IPv4 resolution failed: {dns_err}, trying original URL...", flush=True)
+
             # Try to connect with timeout and retry
             db_pool = psycopg2.pool.ThreadedConnectionPool(
-                2, 8, DATABASE_URL,
+                2, 8, connection_url,
                 connect_timeout=10
             )
             print("✅ Database connection pool initialized", flush=True)
