@@ -182,19 +182,61 @@ DATABASE_URL = get_env_var('DATABASE_URL')
 db_pool = None
 mcp_manager = None
 
+def resolve_ipv4_external(hostname):
+    """Resolve hostname to IPv4 using external DNS (Google 8.8.8.8)"""
+    import subprocess
+    import re
+    try:
+        # Try using getent with timeout
+        result = subprocess.run(
+            ['getent', 'ahostsv4', hostname],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout:
+            # Extract first IPv4 address
+            match = re.search(r'(\d+\.\d+\.\d+\.\d+)', result.stdout)
+            if match:
+                return match.group(1)
+    except:
+        pass
+
+    try:
+        # Fallback: use requests to a DNS-over-HTTPS service
+        import requests
+        resp = requests.get(
+            f'https://dns.google/resolve?name={hostname}&type=A',
+            timeout=5
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if 'Answer' in data:
+                for answer in data['Answer']:
+                    if answer.get('type') == 1:  # A record
+                        return answer.get('data')
+    except:
+        pass
+
+    return None
+
 def init_pool():
     global db_pool, mcp_manager
     if DATABASE_URL:
         try:
             # Force IPv4 resolution to avoid Railway IPv6 incompatibility
             connection_url = DATABASE_URL
-            if 'db.hyjzufgsjbyfynlliuia.supabase.co' in DATABASE_URL:
+            if 'supabase.co' in DATABASE_URL:
                 try:
-                    import socket
-                    # Force IPv4 by using AF_INET
-                    ipv4_addr = socket.getaddrinfo('db.hyjzufgsjbyfynlliuia.supabase.co', 5432, socket.AF_INET)[0][4][0]
-                    connection_url = DATABASE_URL.replace('db.hyjzufgsjbyfynlliuia.supabase.co', ipv4_addr)
-                    print(f"🔄 Resolved to IPv4: {ipv4_addr}", flush=True)
+                    import re
+                    # Extract hostname from DATABASE_URL
+                    match = re.search(r'@([^:]+):', DATABASE_URL)
+                    if match:
+                        hostname = match.group(1)
+                        ipv4_addr = resolve_ipv4_external(hostname)
+                        if ipv4_addr:
+                            connection_url = DATABASE_URL.replace(hostname, ipv4_addr)
+                            print(f"🔄 Resolved {hostname} to IPv4: {ipv4_addr}", flush=True)
+                        else:
+                            print(f"⚠️ Could not resolve IPv4 for {hostname}", flush=True)
                 except Exception as dns_err:
                     print(f"⚠️ IPv4 resolution failed: {dns_err}, trying original URL...", flush=True)
 
