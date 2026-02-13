@@ -180,14 +180,26 @@ mcp_manager = None
 def init_pool():
     global db_pool, mcp_manager
     if DATABASE_URL:
-        db_pool = psycopg2.pool.ThreadedConnectionPool(2, 8, DATABASE_URL)
-
-        # Initialize MCP Manager with database pool
         try:
-            mcp_manager = MCPManager(db_pool)
-            print("🚀 MCP Manager initialized successfully")
+            # Try to connect with timeout and retry
+            db_pool = psycopg2.pool.ThreadedConnectionPool(
+                2, 8, DATABASE_URL,
+                connect_timeout=10
+            )
+            print("✅ Database connection pool initialized")
+
+            # Initialize MCP Manager with database pool
+            try:
+                mcp_manager = MCPManager(db_pool)
+                print("🚀 MCP Manager initialized successfully")
+            except Exception as e:
+                print(f"❌ Failed to initialize MCP Manager: {e}")
+
         except Exception as e:
-            print(f"❌ Failed to initialize MCP Manager: {e}")
+            print(f"⚠️ Database connection failed (will retry): {e}")
+            print("⚠️ Application starting without database - some features unavailable")
+            db_pool = None
+            mcp_manager = None
 
 class ConnectionWrapper:
     """Wraps psycopg2 connection to mimic sqlite3 conn.execute() pattern."""
@@ -235,8 +247,14 @@ def init_db():
     finally:
         conn.close()
 
-init_pool()
-init_db()
+# Initialize database pool with error handling
+try:
+    init_pool()
+    if db_pool:
+        init_db()
+except Exception as e:
+    print(f"⚠️ Startup error: {e}")
+    print("⚠️ Server starting in degraded mode")
 
 def log_system_event(level, message):
     """Log a system event to the database for admin dashboard."""
