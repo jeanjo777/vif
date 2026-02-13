@@ -136,6 +136,80 @@ class SecurityMCP(MCPServer):
             handler=self._shodan_search
         ))
 
+        # === GOOGLE DORKING ===
+
+        self.register_tool(MCPTool(
+            name="google_dork",
+            description="Advanced Google search queries for OSINT and reconnaissance",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Google dork query"},
+                    "target_domain": {"type": "string", "description": "Target domain (optional)"},
+                    "num_results": {"type": "integer", "default": 10, "description": "Number of results"}
+                },
+                "required": ["query"]
+            },
+            handler=self._google_dork
+        ))
+
+        self.register_tool(MCPTool(
+            name="generate_dork_queries",
+            description="Generate Google dork queries from templates",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "category": {
+                        "type": "string",
+                        "enum": ["files", "login_pages", "databases", "configs", "directories", "cameras", "all"],
+                        "description": "Dork category"
+                    },
+                    "target_domain": {"type": "string", "description": "Optional target domain"},
+                    "filetype": {"type": "string", "description": "Optional file extension"}
+                },
+                "required": ["category"]
+            },
+            handler=self._generate_dork_queries
+        ))
+
+        self.register_tool(MCPTool(
+            name="shodan_dork",
+            description="Advanced Shodan queries for device/service discovery",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "dork_type": {
+                        "type": "string",
+                        "enum": ["webcams", "scada", "databases", "routers", "iot", "custom"],
+                        "description": "Pre-built Shodan dork category"
+                    },
+                    "custom_query": {"type": "string", "description": "Custom Shodan query"},
+                    "country": {"type": "string", "description": "Country code (e.g., US, FR)"},
+                    "limit": {"type": "integer", "default": 10}
+                },
+                "required": ["dork_type"]
+            },
+            handler=self._shodan_dork
+        ))
+
+        self.register_tool(MCPTool(
+            name="analyze_dork_results",
+            description="Analyze and categorize Google dork results",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "urls": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of URLs from dork results"
+                    },
+                    "check_sensitive": {"type": "boolean", "default": True}
+                },
+                "required": ["urls"]
+            },
+            handler=self._analyze_dork_results
+        ))
+
         # === MALWARE ANALYSIS ===
 
         self.register_tool(MCPTool(
@@ -862,6 +936,245 @@ class SecurityMCP(MCPServer):
                 "indicators": suspicious_indicators,
                 "recommendation": "Verify sender before clicking" if score > 0 else "URL appears safe"
             }
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    # === GOOGLE DORKING IMPLEMENTATIONS ===
+
+    def _google_dork(self, query: str, target_domain: str = None, num_results: int = 10) -> Dict[str, Any]:
+        """Execute Google dork query"""
+        try:
+            # Build complete dork query
+            full_query = query
+            if target_domain:
+                full_query += f" site:{target_domain}"
+
+            # Use DuckDuckGo as alternative (Google blocks automated queries)
+            from duckduckgo_search import DDGS
+
+            results = []
+            with DDGS() as ddgs:
+                search_results = ddgs.text(full_query, max_results=num_results)
+                for r in search_results:
+                    results.append({
+                        "title": r.get('title'),
+                        "url": r.get('href'),
+                        "snippet": r.get('body', '')[:200]
+                    })
+
+            return {
+                "query": full_query,
+                "target_domain": target_domain,
+                "result_count": len(results),
+                "results": results,
+                "note": "Using DuckDuckGo (Google blocks automation). Use manually for Google."
+            }
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _generate_dork_queries(self, category: str, target_domain: str = None, filetype: str = None) -> Dict[str, Any]:
+        """Generate Google dork queries from templates"""
+        try:
+            dork_templates = {
+                "files": [
+                    f'filetype:{filetype or "pdf"} confidential',
+                    f'ext:{filetype or "sql"} inurl:backup',
+                    f'filetype:{filetype or "xls"} password',
+                    'filetype:env DB_PASSWORD',
+                    'ext:log "password"',
+                    'filetype:bak inurl:"backup"',
+                ],
+                "login_pages": [
+                    'intitle:"index of" "admin"',
+                    'inurl:/wp-admin/',
+                    'inurl:login.php',
+                    'intitle:"Login" inurl:admin',
+                    'inurl:/phpmyadmin/',
+                    'intitle:"Dashboard" inurl:admin',
+                ],
+                "databases": [
+                    'ext:sql mysql dump',
+                    'filetype:sql "INSERT INTO"',
+                    'inurl:"/phpmyadmin/index.php"',
+                    'ext:sql intext:password',
+                    'filetype:mdb inurl:users',
+                ],
+                "configs": [
+                    'ext:xml inurl:config',
+                    'filetype:config inurl:web',
+                    '"index of" .git',
+                    'ext:conf inurl:firewall',
+                    'filetype:properties db.password',
+                ],
+                "directories": [
+                    'intitle:"Index of /" +.htaccess',
+                    '"Index of" /"backup"',
+                    'intitle:"index of" inurl:admin',
+                    '"Parent Directory" "upload"',
+                ],
+                "cameras": [
+                    'inurl:"/view/index.shtml"',
+                    'intitle:"Live View / - AXIS"',
+                    'inurl:ViewerFrame?Mode=',
+                    'intitle:"EvoCam" inurl:"webcam.html"',
+                ]
+            }
+
+            if category == "all":
+                queries = []
+                for cat_queries in dork_templates.values():
+                    queries.extend(cat_queries[:2])  # 2 from each category
+            else:
+                queries = dork_templates.get(category, [])
+
+            # Add site: filter if domain specified
+            if target_domain:
+                queries = [f"{q} site:{target_domain}" for q in queries]
+
+            return {
+                "category": category,
+                "target_domain": target_domain,
+                "query_count": len(queries),
+                "queries": queries,
+                "usage": "Copy these queries to Google/DuckDuckGo for manual search"
+            }
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _shodan_dork(self, dork_type: str, custom_query: str = None, country: str = None, limit: int = 10) -> Dict[str, Any]:
+        """Execute Shodan dork queries"""
+        try:
+            if not self.shodan_key:
+                # Return pre-built queries for manual use
+                shodan_dorks = {
+                    "webcams": 'webcam has_screenshot:true',
+                    "scada": 'SCADA country:"US"',
+                    "databases": 'product:"MongoDB" port:27017',
+                    "routers": 'port:23 country:"US"',
+                    "iot": 'product:"Arduino"',
+                }
+
+                query = custom_query if dork_type == "custom" else shodan_dorks.get(dork_type, "")
+
+                if country and 'country:' not in query:
+                    query += f' country:"{country}"'
+
+                return {
+                    "error": "Shodan API key not configured",
+                    "dork_type": dork_type,
+                    "query": query,
+                    "note": "Set SHODAN_API_KEY to execute. Use query manually at shodan.io"
+                }
+
+            # Execute with Shodan API
+            shodan_dorks = {
+                "webcams": 'webcam has_screenshot:true',
+                "scada": 'scada',
+                "databases": 'product:"MongoDB"',
+                "routers": 'device:"router"',
+                "iot": 'product:"Arduino"',
+            }
+
+            query = custom_query if dork_type == "custom" else shodan_dorks.get(dork_type, "")
+
+            if country:
+                query += f' country:"{country}"'
+
+            url = f"https://api.shodan.io/shodan/host/search?key={self.shodan_key}&query={query}"
+            response = requests.get(url, timeout=15)
+            data = response.json()
+
+            results = data.get('matches', [])[:limit]
+
+            return {
+                "dork_type": dork_type,
+                "query": query,
+                "total_results": data.get('total', 0),
+                "results": [{
+                    "ip": r.get('ip_str'),
+                    "port": r.get('port'),
+                    "org": r.get('org'),
+                    "location": f"{r.get('location', {}).get('city', '')}, {r.get('location', {}).get('country_name', '')}",
+                    "product": r.get('product', '')
+                } for r in results]
+            }
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _analyze_dork_results(self, urls: List[str], check_sensitive: bool = True) -> Dict[str, Any]:
+        """Analyze Google dork results"""
+        try:
+            analysis = {
+                "total_urls": len(urls),
+                "categorized": {
+                    "sensitive_files": [],
+                    "login_pages": [],
+                    "directories": [],
+                    "configs": [],
+                    "other": []
+                },
+                "risk_summary": {
+                    "high_risk": 0,
+                    "medium_risk": 0,
+                    "low_risk": 0
+                }
+            }
+
+            sensitive_extensions = ['.sql', '.env', '.bak', '.config', '.key', '.pem', '.log']
+            login_keywords = ['login', 'admin', 'wp-admin', 'phpmyadmin', 'signin']
+            directory_keywords = ['index of', 'directory listing', 'parent directory']
+            config_keywords = ['.git', 'web.config', 'config.php', '.xml']
+
+            for url in urls:
+                url_lower = url.lower()
+                risk_level = "low_risk"
+
+                # Categorize
+                if any(ext in url_lower for ext in sensitive_extensions):
+                    analysis["categorized"]["sensitive_files"].append(url)
+                    risk_level = "high_risk"
+                elif any(kw in url_lower for kw in login_keywords):
+                    analysis["categorized"]["login_pages"].append(url)
+                    risk_level = "medium_risk"
+                elif any(kw in url_lower for kw in directory_keywords):
+                    analysis["categorized"]["directories"].append(url)
+                    risk_level = "medium_risk"
+                elif any(kw in url_lower for kw in config_keywords):
+                    analysis["categorized"]["configs"].append(url)
+                    risk_level = "high_risk"
+                else:
+                    analysis["categorized"]["other"].append(url)
+
+                analysis["risk_summary"][risk_level] += 1
+
+            # Calculate overall risk
+            total_high = analysis["risk_summary"]["high_risk"]
+            total_medium = analysis["risk_summary"]["medium_risk"]
+
+            if total_high > 3:
+                overall_risk = "CRITICAL"
+            elif total_high > 0 or total_medium > 5:
+                overall_risk = "HIGH"
+            elif total_medium > 0:
+                overall_risk = "MEDIUM"
+            else:
+                overall_risk = "LOW"
+
+            analysis["overall_risk"] = overall_risk
+            analysis["recommendations"] = []
+
+            if total_high > 0:
+                analysis["recommendations"].append("Immediately secure sensitive files found")
+            if len(analysis["categorized"]["directories"]) > 0:
+                analysis["recommendations"].append("Disable directory listing")
+            if len(analysis["categorized"]["login_pages"]) > 0:
+                analysis["recommendations"].append("Implement rate limiting on login pages")
+
+            return analysis
 
         except Exception as e:
             return {"error": str(e)}
