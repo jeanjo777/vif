@@ -3,9 +3,10 @@ Vif MCP (Model Context Protocol) System
 Provides external tools and capabilities to AI models
 
 Features:
-- 13 MCP Servers with 65+ tools
+- 14 MCP Servers with 85+ tools
 - Vision & Multimodal AI
 - Video generation & editing
+- Cybersecurity & pentesting
 - DevTools automation
 - Data Science & ML
 - Creative generation
@@ -29,6 +30,7 @@ from .memory_system import MemorySystemMCP
 # New Advanced MCP Servers
 from .vision import VisionMCP
 from .video import VideoMCP
+from .security import SecurityMCP
 from .devtools import DevToolsMCP
 from .data_science import DataScienceMCP
 from .creative import CreativeMCP
@@ -65,6 +67,7 @@ __all__ = [
     # New Servers
     'VisionMCP',
     'VideoMCP',
+    'SecurityMCP',
     'DevToolsMCP',
     'DataScienceMCP',
     'CreativeMCP',

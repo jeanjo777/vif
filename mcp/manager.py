@@ -1,6 +1,6 @@
 """
 MCP Manager - Central orchestrator for all MCP servers
-Enhanced with caching, agents, and 13 MCP servers
+Enhanced with caching, agents, and 14 MCP servers
 """
 from typing import Dict, List, Any, Optional
 import json
@@ -17,6 +17,7 @@ from .memory_system import MemorySystemMCP
 # New Advanced MCP Servers
 from .vision import VisionMCP
 from .video import VideoMCP
+from .security import SecurityMCP
 from .devtools import DevToolsMCP
 from .data_science import DataScienceMCP
 from .creative import CreativeMCP
@@ -72,6 +73,7 @@ class MCPManager:
         # New advanced servers
         self._init_server('vision', lambda: VisionMCP())
         self._init_server('video', lambda: VideoMCP())
+        self._init_server('security', lambda: SecurityMCP())
         self._init_server('devtools', lambda: DevToolsMCP(self.workspace_path))
         self._init_server('data_science', lambda: DataScienceMCP())
         self._init_server('creative', lambda: CreativeMCP())
