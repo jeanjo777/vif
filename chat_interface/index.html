@@ -803,7 +803,7 @@
                         style="width:100%; background:linear-gradient(135deg, #ef4444, #dc2626); border:none; color:#fff; padding:12px; font-family:var(--font-mono); font-size:0.8rem; font-weight:bold; cursor:pointer; border-radius:8px; display:flex; align-items:center; justify-content:center; gap:8px; transition:all 0.3s; box-shadow:0 0 15px rgba(239,68,68,0.3); margin-top:10px;"
                         onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 5px 25px rgba(239,68,68,0.5)'"
                         onmouseout="this.style.transform='none'; this.style.boxShadow='0 0 15px rgba(239,68,68,0.3)'">
-                        <i class="fas fa-bolt"></i> UPGRADE TO PRO - $9.99/mo
+                        <i class="fas fa-crown"></i> UPGRADE TO PRO - $9.99/mo
                     </button>
                 </div>
             </div>
@@ -818,7 +818,7 @@
                         style="display:none; background:linear-gradient(135deg, #ef4444, #dc2626); border:none; color:#fff; padding:6px 14px; font-family:var(--font-mono); font-size:0.7rem; font-weight:bold; cursor:pointer; border-radius:6px; align-items:center; gap:6px; transition:all 0.2s;"
                         onmouseover="this.style.transform='translateY(-1px)'"
                         onmouseout="this.style.transform='none'">
-                        <i class="fas fa-bolt"></i> SUBSCRIBE
+                        <i class="fas fa-crown"></i> SUBSCRIBE
                     </button>
                     <div id="access-badge"
                         style="font-family:var(--font-mono); font-size:0.7rem; color:#ef4444; border:1px solid #ef4444; padding:2px 6px; border-radius:2px;">
@@ -1561,7 +1561,7 @@
                 if (contentType && contentType.includes("application/json")) {
                     const errorData = await response.json();
                     if (errorData.error === 'NO_CREDITS') {
-                        contentDiv.innerHTML = '<span style="color:#fcd34d;">You have used all your free credits. Subscribe to continue using Vif.</span><br><button onclick="goSubscribe()" style="margin-top:10px; background:linear-gradient(135deg,#ef4444,#dc2626); border:none; color:#fff; padding:10px 20px; border-radius:6px; cursor:pointer; font-family:inherit; font-weight:bold;"><i class="fas fa-bolt"></i> SUBSCRIBE - $9.99/mo</button>';
+                        contentDiv.innerHTML = '<span style="color:#fcd34d;">You have used all your free credits. Subscribe to continue using Vif.</span><br><button onclick="goSubscribe()" style="margin-top:10px; background:linear-gradient(135deg,#ef4444,#dc2626); border:none; color:#fff; padding:10px 20px; border-radius:6px; cursor:pointer; font-family:inherit; font-weight:bold;"><i class="fas fa-crown"></i> SUBSCRIBE - $9.99/mo</button>';
                         loadCreditsStatus();
                         return;
                     }

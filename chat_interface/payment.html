@@ -222,7 +222,7 @@
         </div>
 
         <button class="btn-subscribe" id="btn-subscribe" onclick="subscribe()">
-            <i class="fas fa-bolt"></i> SUBSCRIBE NOW
+            <i class="fas fa-crown"></i> SUBSCRIBE NOW
         </button>
 
         <div class="secure-badge">
@@ -263,13 +263,13 @@
                     errorDiv.innerText = data.error || 'Failed to create checkout session';
                     errorDiv.style.display = 'block';
                     btn.disabled = false;
-                    btn.innerHTML = '<i class="fas fa-bolt"></i> SUBSCRIBE NOW';
+                    btn.innerHTML = '<i class="fas fa-crown"></i> SUBSCRIBE NOW';
                 }
             } catch (err) {
                 errorDiv.innerText = 'Server unreachable';
                 errorDiv.style.display = 'block';
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-bolt"></i> SUBSCRIBE NOW';
+                btn.innerHTML = '<i class="fas fa-crown"></i> SUBSCRIBE NOW';
             }
         }
 
