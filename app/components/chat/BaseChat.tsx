@@ -6,7 +6,6 @@ import type { JSONValue, Message } from 'ai';
 import React, { type RefCallback, useEffect, useMemo, useState } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
-import { Workbench } from '~/components/workbench/Workbench.client';
 import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
 import { Messages } from './Messages.client';
@@ -450,11 +449,7 @@ export const BaseChat = React.memo(React.forwardRef<HTMLDivElement, BaseChatProp
             </StickToBottom>
             {/* Import buttons, example prompts, and starter templates removed */}
           </div>
-          <ClientOnly>
-            {() => (
-              <Workbench chatStarted={chatStarted} isStreaming={isStreaming} setSelectedElement={setSelectedElement} />
-            )}
-          </ClientOnly>
+          {/* Workbench removed - pure conversational chatbot */}
         </div>
       </div>
     );
