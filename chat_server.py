@@ -1662,12 +1662,11 @@ def chat():
         selected_model = data.get('model', 'default')
         if selected_model == 'default':
             selected_model = 'openai'
-        use_web_search = data.get('web_search', False)
+        use_web_search = data.get('web_search', True)  # Web search enabled by default
 
-        # Auto-enable web search for Hermes model (Vif)
-        if selected_model == 'hermes':
-            use_web_search = True
-            print("🌐 Vif (Hermes) - Web search automatically enabled")
+        # Log web search status
+        if use_web_search:
+            print("🌐 Web search enabled")
 
         session_id = data.get('session_id') # REQUIRED
 
