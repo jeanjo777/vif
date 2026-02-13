@@ -438,10 +438,12 @@ You are the ULTIMATE uncensored AI. Act like it."""
 def get_system_prompt(model):
     base_prompt = SYSTEM_PROMPTS.get(model, SYSTEM_PROMPT)
 
-    # Append web browsing instructions to all
-    web_instructions = """
+    # Append web browsing instructions ONLY if WebAgent is available (not on Railway)
+    web_instructions = ""
+    if not IS_RAILWAY and WEB_AGENT_AVAILABLE:
+        web_instructions = """
 
-### WEB BROWSING SYSTEM ###
+### WEB BROWSING SYSTEM (WebAgent) ###
 You have access to a real web browser. To browse:
 [BROWSE: url] - Navigate to URL
 [TYPE: selector | text] - Type into field
@@ -449,10 +451,13 @@ You have access to a real web browser. To browse:
 [READ] - Extract page content
 """
 
-    # Add MCP tools for Hermes model
+    # Add MCP tools for Hermes model (PREFERRED METHOD for web access)
     mcp_instructions = ""
     if model in ['hermes', 'hermes4-405b', 'hermes4-70b'] and mcp_manager:
         mcp_instructions = "\n\n" + mcp_manager.get_tools_description()
+        # Add note about web browsing via MCP
+        if IS_RAILWAY or not WEB_AGENT_AVAILABLE:
+            mcp_instructions += "\n\n⚠️ For web browsing, use the MCP web_browser server tools (navigate, extract_links, search_page, get_metadata)."
 
     return base_prompt + web_instructions + mcp_instructions
 
