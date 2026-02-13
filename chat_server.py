@@ -1188,32 +1188,40 @@ def static_files(path):
 
 # --- SESSIONS MANAGEMENT (SECURED) ---
 @app.route('/api/sessions', methods=['GET'])
-@login_required 
+@login_required
 def list_sessions():
-    username = session.get('username')
-    conn = get_db_connection()
-    # FILTER BY USERNAME
-    sessions = conn.execute('SELECT * FROM sessions WHERE username = %s ORDER BY created_at DESC', (username,)).fetchall()
-    conn.close()
-    return jsonify([dict(ix) for ix in sessions])
+    if db_pool is None:
+        return jsonify([])
+    try:
+        username = session.get('username')
+        conn = get_db_connection()
+        # FILTER BY USERNAME
+        sessions = conn.execute('SELECT * FROM sessions WHERE username = %s ORDER BY created_at DESC', (username,)).fetchall()
+        conn.close()
+        return jsonify([dict(ix) for ix in sessions])
+    except:
+        return jsonify([])
 
 @app.route('/api/sessions', methods=['POST'])
-@login_required 
+@login_required
 def create_session():
     session_id = str(uuid.uuid4())
     username = session.get('username')
-    # We can perform early insertion if we want, or wait for first message.
-    # To ensure it appears in list immediately (better UX), let's insert now.
     created_at = datetime.datetime.now()
     title = 'New Signal'
-    
-    conn = get_db_connection()
-    conn.execute('INSERT INTO sessions (id, title, created_at, username) VALUES (%s, %s, %s, %s)', 
-                 (session_id, title, created_at, username))
-    conn.commit()
-    conn.close()
-    
-    return jsonify({'id': session_id, 'title': title})
+
+    if db_pool is None:
+        return jsonify({'id': session_id, 'title': title})
+
+    try:
+        conn = get_db_connection()
+        conn.execute('INSERT INTO sessions (id, title, created_at, username) VALUES (%s, %s, %s, %s)',
+                     (session_id, title, created_at, username))
+        conn.commit()
+        conn.close()
+        return jsonify({'id': session_id, 'title': title})
+    except:
+        return jsonify({'id': session_id, 'title': title})
 
 @app.route('/api/sessions/<session_id>', methods=['GET'])
 @login_required
