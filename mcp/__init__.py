@@ -21,6 +21,8 @@ from .base import MCPServer, MCPTool
 
 # Original MCP Servers
 from .web_browser import WebBrowserMCP
+from .playwright_browser import PlaywrightBrowserMCP
+from .scraping_api import ScrapingAPIMCP
 from .file_system import FileSystemMCP
 from .database import DatabaseMCP
 from .code_execution import CodeExecutionMCP
@@ -58,6 +60,8 @@ __all__ = [
 
     # Original Servers
     'WebBrowserMCP',
+    'PlaywrightBrowserMCP',
+    'ScrapingAPIMCP',
     'FileSystemMCP',
     'DatabaseMCP',
     'CodeExecutionMCP',

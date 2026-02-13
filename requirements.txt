@@ -68,6 +68,9 @@ slack-sdk>=3.23.0
 # RAG & Vector Search (for RAGMemoryMCP)
 sentence-transformers>=2.2.0
 
+# Web Automation (for enhanced web capabilities)
+playwright>=1.40.0
+
 # Optional dependencies (install separately if needed)
 # pytesseract  # For OCR in VisionMCP
 # opencv-python  # For advanced image processing
