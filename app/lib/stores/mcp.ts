@@ -10,9 +10,29 @@ type MCPSettings = {
 };
 
 const defaultSettings = {
-  maxLLMSteps: 5,
+  maxLLMSteps: 10,
   mcpConfig: {
-    mcpServers: {},
+    mcpServers: {
+      playwright: {
+        type: 'stdio' as const,
+        command: 'npx',
+        args: ['@playwright/mcp', '--headless'],
+      },
+      memory: {
+        type: 'stdio' as const,
+        command: 'npx',
+        args: ['@modelcontextprotocol/server-memory'],
+      },
+      filesystem: {
+        type: 'stdio' as const,
+        command: 'npx',
+        args: ['@modelcontextprotocol/server-filesystem', '/tmp/vif-workspace'],
+      },
+      deepwiki: {
+        type: 'streamable-http' as const,
+        url: 'https://mcp.deepwiki.com/mcp',
+      },
+    },
   },
 } satisfies MCPSettings;
 

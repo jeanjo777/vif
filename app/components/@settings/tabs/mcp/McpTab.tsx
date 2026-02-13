@@ -7,21 +7,24 @@ import McpServerList from '~/components/@settings/tabs/mcp/McpServerList';
 
 const EXAMPLE_MCP_CONFIG: MCPConfig = {
   mcpServers: {
-    everything: {
+    playwright: {
       type: 'stdio',
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-everything'],
+      args: ['@playwright/mcp', '--headless'],
+    },
+    memory: {
+      type: 'stdio',
+      command: 'npx',
+      args: ['@modelcontextprotocol/server-memory'],
+    },
+    filesystem: {
+      type: 'stdio',
+      command: 'npx',
+      args: ['@modelcontextprotocol/server-filesystem', '/tmp/vif-workspace'],
     },
     deepwiki: {
       type: 'streamable-http',
       url: 'https://mcp.deepwiki.com/mcp',
-    },
-    'local-sse': {
-      type: 'sse',
-      url: 'http://localhost:8000/sse',
-      headers: {
-        Authorization: 'Bearer mytoken123',
-      },
     },
   },
 };
