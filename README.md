@@ -1,58 +1,31 @@
-# Vif
+# Vif - AI Chat Interface
 
-**Vif** - A powerful multimodal AI chat assistant with support for 19+ AI providers.
-
-![Vif](./public/logo-dark-styled.svg)
+**Vif** is a powerful AI chat application with support for multiple AI providers, voice input, and text-to-speech capabilities.
 
 ## 🚀 Features
 
-- **19+ AI Providers** - OpenRouter, Anthropic, OpenAI, Google, DeepSeek, and more
-- **Multimodal Support** - Text, images, and files
-- **Pure Conversational Interface** - Clean chat experience
-- **Multi-Provider** - Switch between AI models seamlessly
-- **History & Export** - Save and export your conversations
-- **Voice Input** - Speech-to-text support
-- **Dark/Light Mode** - Beautiful themes
-- **Self-Hosted** - Deploy anywhere
-
-## 🎯 Supported AI Providers
-
-### Cloud Providers
-- **OpenRouter** (Default) - Access to multiple models
-- **Anthropic** - Claude models
-- **OpenAI** - GPT models
-- **Google** - Gemini
-- **DeepSeek**
-- **Groq**
-- **Mistral**
-- **Together AI**
-- **X.AI** - Grok
-- **Perplexity AI**
-- **HuggingFace**
-- **Cohere**
-- **GitHub Models**
-- **Amazon Bedrock**
-- And more...
-
-### Local Providers
-- **Ollama** - Run models locally
-- **LMStudio** - Local model management
-- **OpenAI-compatible APIs**
+- **Multiple AI Models** - GPT-5, Mixtral 8x7B, and custom models
+- **Voice Input & TTS** - Speak to the AI and hear responses
+- **Web Search** - Optional web uplink for enhanced responses
+- **Session Management** - Save and manage conversation history
+- **Editorial UI** - Clean, monochrome interface with orange accents
+- **Subscription System** - Free trial with upgrade options
+- **Admin Panel** - Management dashboard for administrators
 
 ## 🛠️ Tech Stack
 
-- **Framework**: Remix + Vite
-- **Language**: TypeScript
-- **Styling**: UnoCSS + SCSS
-- **AI SDK**: Vercel AI SDK
-- **Database**: IndexedDB (local) + Supabase (optional)
-- **Deployment**: Railway, Vercel, Netlify
+- **Backend**: Python 3.11 + Flask
+- **Frontend**: HTML + Vanilla JavaScript
+- **Database**: SQLite (wormgpt.db)
+- **AI Integration**: Multiple providers via API
+- **TTS**: Server-side text-to-speech
+- **Deployment**: Railway, Heroku, or any Python host
 
 ## 📦 Quick Start
 
 ### Prerequisites
-- Node.js 18+ or Docker
-- pnpm (recommended) or npm
+- Python 3.11+
+- pip or virtualenv
 
 ### Local Development
 
@@ -61,53 +34,62 @@
 git clone https://github.com/jeanjo777/vif.git
 cd vif
 
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
 # Install dependencies
-pnpm install
+pip install -r requirements.txt
 
-# Copy environment file
-cp .env.example .env.local
+# Set environment variables
+cp .env.example .env
+# Edit .env with your API keys
 
-# Add your API keys to .env.local
-# At minimum, add one provider key (e.g., OPEN_ROUTER_API_KEY)
+# Run the server
+python chat_server.py
 
-# Start development server
-pnpm run dev
-
-# Open http://localhost:5173
+# Open http://localhost:8080
 ```
 
 ### Docker
 
 ```bash
 # Build the image
-pnpm run dockerbuild
+docker build -t vif .
 
 # Run the container
-pnpm run dockerrun
+docker run -p 8080:8080 --env-file .env vif
 
-# Open http://localhost:5173
+# Open http://localhost:8080
 ```
 
 ## ⚙️ Configuration
 
 ### Environment Variables
 
-Create a `.env.local` file with your API keys:
+Create a `.env` file with your API keys:
 
 ```env
-# OpenRouter (Recommended - gives access to multiple models)
-OPEN_ROUTER_API_KEY=your_key_here
+# Flask
+FLASK_SECRET_KEY=your-secret-key-here
 
-# Or use specific providers
-ANTHROPIC_API_KEY=your_key_here
-OPENAI_API_KEY=your_key_here
-GOOGLE_GENERATIVE_AI_API_KEY=your_key_here
+# Database
+DATABASE_URL=sqlite:///wormgpt.db
 
-# Default provider
-DEFAULT_PROVIDER=OpenRouter
+# AI Provider Keys
+OPENAI_API_KEY=your-key-here
+ANTHROPIC_API_KEY=your-key-here
+# ... see .env.example for all options
 ```
 
-See `.env.example` for all available configuration options.
+### Payment Integration
+
+Configure Stripe for subscriptions:
+
+```env
+STRIPE_SECRET_KEY=your-stripe-key
+STRIPE_PRICE_ID=your-price-id
+```
 
 ## 🚀 Deployment
 
@@ -121,46 +103,65 @@ See `.env.example` for all available configuration options.
 
 Your app will be live at `your-project.railway.app`
 
-### Vercel
+### Heroku
 
 ```bash
-# Install Vercel CLI
-npm i -g vercel
+# Install Heroku CLI
+npm i -g heroku
+
+# Login and create app
+heroku login
+heroku create vif-app
+
+# Set environment variables
+heroku config:set FLASK_SECRET_KEY=xxx
 
 # Deploy
-pnpm run build
-vercel --prod
+git push heroku main
 ```
 
-### Netlify
+## 📁 Project Structure
 
-```bash
-# Install Netlify CLI
-npm i -g netlify-cli
-
-# Deploy
-pnpm run build
-netlify deploy --prod
+```
+vif/
+├── chat_server.py          # Main Flask application
+├── chat_interface/         # Frontend HTML/CSS/JS
+│   └── index.html         # Main chat interface
+├── memory_engine.py       # Conversation memory system
+├── web_agent.py          # Web search integration
+├── backup_manager.py     # Database backup utilities
+├── requirements.txt      # Python dependencies
+├── Dockerfile           # Docker configuration
+└── tests/              # Test suites
 ```
 
-## 📝 Scripts
+## 🔒 Security
 
-```bash
-pnpm run dev          # Start development server
-pnpm run build        # Build for production
-pnpm run start        # Start production server
-pnpm run typecheck    # Run TypeScript checks
-pnpm run lint         # Lint code
-pnpm run lint:fix     # Fix linting issues
-pnpm run test         # Run tests
+- All conversations encrypted at rest
+- API keys stored in environment variables
+- Database backups automated
+- Admin access protected
+- HTTPS enforced in production
+
+## 📝 API Endpoints
+
+```
+POST   /api/chat              # Send chat message
+GET    /api/sessions          # List chat sessions
+POST   /api/sessions          # Create new session
+GET    /api/credits           # Check user credits
+POST   /api/tts               # Text-to-speech
+POST   /api/create-checkout   # Stripe checkout
 ```
 
-## 🔒 Privacy
+## 🎯 Admin Features
 
-- All conversations are stored **locally** in your browser
-- API keys are stored **locally** in cookies/localStorage
-- Optional Supabase integration for cloud backup
-- No data is sent to Vif servers (we don't have any!)
+Access admin panel at `/admin` (requires admin privileges):
+- User management
+- System monitoring
+- Credit allocation
+- Session overview
+- System broadcasts
 
 ## 📄 License
 
@@ -177,8 +178,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 🙏 Acknowledgments
 
-Built with modern web technologies and powered by the Vercel AI SDK.
+Built with Flask and powered by multiple AI providers.
 
 ---
 
-**Made with ❤️ by the Vif team**
+**Made with ❤️ by Jo**

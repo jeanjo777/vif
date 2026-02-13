@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACCESS CONTROL // VIF</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --accent: #ef4444;
+            /* Red for security */
+            --text: #e5e5e5;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .login-container {
+            width: 90%;
+            max-width: 400px;
+            padding: 40px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.02);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            position: relative;
+        }
+
+        .login-container::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: -1px;
+            right: -1px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+            color: var(--accent);
+            text-transform: uppercase;
+        }
+
+        .icon-lock {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            color: var(--accent);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                text-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+                opacity: 0.8;
+            }
+
+            50% {
+                text-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+                opacity: 1;
+            }
+
+            100% {
+                text-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+                opacity: 0.8;
+            }
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            background: #111;
+            border: 1px solid #333;
+            color: white;
+            font-family: inherit;
+            margin-bottom: 12px;
+            border-radius: 4px;
+            outline: none;
+            text-align: center;
+            letter-spacing: 2px;
+            font-size: 0.85rem;
+            transition: border-color 0.3s;
+        }
+
+        .form-input:focus {
+            border-color: var(--accent);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            font-family: inherit;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #dc2626;
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+        }
+
+        .error-msg {
+            color: var(--accent);
+            font-size: 0.8rem;
+            margin-top: 15px;
+            min-height: 1.2em;
+            display: none;
+        }
+
+        .scan-line {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            animation: scan 3s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes scan {
+            0% {
+                top: -10%;
+            }
+
+            100% {
+                top: 110%;
+            }
+        }
+        @media (max-width: 480px) {
+            body {
+                align-items: flex-start;
+                padding-top: 10vh;
+            }
+
+            .login-container {
+                width: 92%;
+                padding: 28px 20px;
+                border-radius: 6px;
+            }
+
+            .icon-lock {
+                font-size: 2.2rem;
+                margin-bottom: 14px;
+            }
+
+            h1 {
+                font-size: 1.2rem;
+            }
+
+            .form-input {
+                padding: 11px;
+                font-size: 0.8rem;
+            }
+
+            button {
+                padding: 12px;
+                font-size: 0.8rem;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .login-container {
+                width: 96%;
+                padding: 22px 14px;
+            }
+
+            .icon-lock {
+                font-size: 1.8rem;
+                margin-bottom: 10px;
+            }
+
+            h1 {
+                font-size: 1rem;
+            }
+        }
+
+        @media (min-height: 700px) and (max-width: 480px) {
+            body {
+                align-items: center;
+                padding-top: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="scan-line"></div>
+    <div class="login-container">
+        <i class="fas fa-lock icon-lock"></i>
+        <h1>Vif</h1>
+        <p style="color: #666; font-size: 0.8rem; margin-bottom: 30px;">SECURE ENVIRONMENT ACCESS</p>
+
+        <form id="login-form">
+            <input type="text" id="username" class="form-input" placeholder="USERNAME" required autocomplete="off">
+            <input type="password" id="password" class="form-input" placeholder="PASSWORD" required autocomplete="off">
+            <button type="submit">AUTHENTICATE</button>
+        </form>
+
+        <div style="margin-top:20px; font-size:0.8rem;">
+            <a href="register.html" style="color:#666; text-decoration:none;">Create Identity Protocol</a>
+        </div>
+
+        <div style="margin-top:25px; padding-top:15px; border-top:1px solid #222; font-size:0.6rem; color:#444;">
+            Made with <i class="fas fa-heart" style="color:#ef4444;"></i> by Jo
+        </div>
+
+        <!-- LOADING PROGRESS (Hidden) -->
+        <div id="loading-container" style="display:none; width: 100%; margin-top: 20px;">
+            <div id="loading-text"
+                style="font-size: 0.75rem; color: #10b981; margin-bottom: 8px; text-align: center; letter-spacing: 1px;">
+                INITIALIZING PROTOCOLS...</div>
+            <div
+                style="width: 100%; height: 6px; border-radius: 99px; overflow: hidden; background: #1f2937; border: 1px solid #374151; position: relative;">
+                <div id="progress-bar"
+                    style="width: 5%; height: 100%; background: #10b981; transition: width 0.5s ease-out; box-shadow: 0 0 15px rgba(16, 185, 129, 0.6);">
+                </div>
+            </div>
+        </div>
+
+        <div class="error-msg" id="error-msg">ACCESS DENIED</div>
+    </div>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const errorMsg = document.getElementById('error-msg');
+            const form = document.getElementById('login-form');
+            const loader = document.getElementById('loading-container');
+            const bar = document.getElementById('progress-bar');
+            const text = document.getElementById('loading-text');
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Start Animation
+                    form.style.display = 'none';
+                    errorMsg.style.display = 'none';
+                    loader.style.display = 'block';
+
+                    // Animation Steps
+                    setTimeout(() => { bar.style.width = '13%'; text.innerText = "VERIFYING HASH..."; }, 50);
+
+                    setTimeout(() => {
+                        bar.style.width = '45%';
+                        text.innerText = "DECRYPTING DATABASE...";
+                    }, 500);
+
+                    setTimeout(() => {
+                        bar.style.width = '78%';
+                        text.innerText = "ESTABLISHING SECURE CONNECTION...";
+                    }, 1000);
+
+                    setTimeout(() => {
+                        bar.style.width = '100%';
+                        text.innerText = "ACCESS GRANTED";
+                        text.style.color = "#4ade80";
+                        text.style.textShadow = "0 0 10px #4ade80";
+                    }, 1500);
+
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 2000);
+
+                } else {
+                    errorMsg.innerText = data.error || "ACCESS DENIED";
+                    errorMsg.style.display = 'block';
+                    document.getElementById('password').value = '';
+                    const container = document.querySelector('.login-container');
+                    container.style.animation = 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both';
+                    setTimeout(() => container.style.animation = '', 400);
+                }
+            } catch (err) {
+                console.error(err);
+                errorMsg.innerText = "SERVER ERROR";
+                errorMsg.style.display = 'block';
+            }
+        });
+    </script>
+    <style>
+        @keyframes shake {
+
+            10%,
+            90% {
+                transform: translate3d(-1px, 0, 0);
+            }
+
+            20%,
+            80% {
+                transform: translate3d(2px, 0, 0);
+            }
+
+            30%,
+            50%,
+            70% {
+                transform: translate3d(-4px, 0, 0);
+            }
+
+            40%,
+            60% {
+                transform: translate3d(4px, 0, 0);
+            }
+        }
+    </style>
+</body>
+
+</html>

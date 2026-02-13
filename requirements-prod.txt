@@ -1,0 +1,49 @@
+# Core dependencies for production
+beautifulsoup4>=4.12.2
+colorama==0.4.6
+distro==1.8.0
+openai>=1.0.0
+python-dotenv==0.21.1
+pyyaml>=6.0
+PyPDF2
+python-docx
+markdown
+pylatexenc
+readability-lxml==0.8.1
+requests
+tiktoken>=0.3.3
+gTTS==2.3.1
+duckduckgo-search>=6.0.0
+orjson>=3.8.10
+ftfy>=6.1.1
+Pillow
+jsonschema
+click
+charset-normalizer>=3.1.0
+prompt_toolkit>=3.0.38
+pydantic
+inflection
+
+# Web server
+Flask
+flask-cors
+Flask-Limiter
+gunicorn
+
+# Security
+cryptography
+werkzeug
+
+# Database
+psycopg2-binary>=2.9.9
+
+# API clients
+huggingface_hub
+pypdf
+psutil
+stripe
+httpx>=0.25.0
+
+# Additional utilities
+python-multipart
+itsdangerous

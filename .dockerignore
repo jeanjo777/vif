@@ -1,26 +1,10 @@
-# Ignore Git and GitHub files
-.git
-.github/
-
-# Ignore Husky configuration files
-.husky/
-
-# Ignore documentation and metadata files
-CONTRIBUTING.md
-LICENSE
-README.md
-
-# Ignore environment examples and sensitive info
+__pycache__
+*.pyc
 .env
-*.local
-*.example
-
-# Ignore node modules, logs and cache files
-**/*.log
-**/node_modules
-**/dist
-**/build
-**/.cache
-logs
-dist-ssr
-.DS_Store
+*.db
+secure_storage/.devcontainer
+tests
+docs
+nul
+*.bak
+agbenchmark

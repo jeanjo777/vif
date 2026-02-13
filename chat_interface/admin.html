@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIF // OVERWATCH</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: #050505;
+            color: #e5e5e5;
+        }
+
+        .glass {
+            background: rgba(20, 20, 20, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .card {
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            border-color: #ef4444;
+        }
+
+        .status-dot {
+            height: 8px;
+            width: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 5px currentColor;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #111;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #ef4444;
+        }
+    </style>
+</head>
+
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- NAVBAR -->
+    <nav class="border-b border-gray-800 bg-black/50 p-4 flex justify-between items-center z-10">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-biohazard text-red-500 text-xl animate-pulse"></i>
+            <h1 class="text-xl font-bold tracking-widest text-red-500">VIF <span class="text-gray-500 text-sm">//
+                    OVERWATCH</span></h1>
+        </div>
+        <div class="flex items-center gap-4 text-xs text-gray-400">
+            <div id="clock">00:00:00</div>
+            <div class="flex items-center gap-2 px-3 py-1 border border-gray-800 rounded bg-gray-900">
+                <div class="status-dot text-green-500"></div> SYSTEM ACTIVE
+            </div>
+            <button onclick="window.location.href='/'" class="hover:text-white transition"><i
+                    class="fas fa-terminal"></i> VIEW TERMINAL</button>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 overflow-auto p-6 relative">
+        <!-- Background Grid -->
+        <div class="absolute inset-0 opacity-10 pointer-events-none"
+            style="background-image: radial-gradient(#333 1px, transparent 1px); background-size: 20px 20px;"></div>
+
+        <!-- STATS ROW -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 relative z-10">
+            <!-- CPU -->
+            <div class="glass p-5 rounded-lg border-l-4 border-red-500 card">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-500 text-xs uppercase mb-1">CPU Load</p>
+                        <h3 class="text-2xl font-bold" id="stat-cpu">0%</h3>
+                    </div>
+                    <i class="fas fa-microchip text-gray-700 text-2xl"></i>
+                </div>
+                <div class="w-full bg-gray-800 h-1 mt-3 rounded-full overflow-hidden">
+                    <div id="bar-cpu" class="h-full bg-red-500 transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- RAM -->
+            <div class="glass p-5 rounded-lg border-l-4 border-orange-500 card">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-500 text-xs uppercase mb-1">Memory Usage</p>
+                        <h3 class="text-2xl font-bold" id="stat-ram">0%</h3>
+                    </div>
+                    <i class="fas fa-memory text-gray-700 text-2xl"></i>
+                </div>
+                <div class="w-full bg-gray-800 h-1 mt-3 rounded-full overflow-hidden">
+                    <div id="bar-ram" class="h-full bg-orange-500 transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- USERS -->
+            <div class="glass p-5 rounded-lg border-l-4 border-blue-500 card">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-500 text-xs uppercase mb-1">Total Agents</p>
+                        <h3 class="text-2xl font-bold" id="stat-users">0</h3>
+                    </div>
+                    <i class="fas fa-users text-gray-700 text-2xl"></i>
+                </div>
+                <p class="text-xs text-blue-400 mt-2" id="stat-users-new">+0 New detected</p>
+            </div>
+
+            <!-- ONLINE AGENTS -->
+            <div class="glass p-5 rounded-lg border-l-4 border-purple-500 card">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-500 text-xs uppercase mb-1">Online Agents</p>
+                        <h3 class="text-2xl font-bold" id="stat-online">0</h3>
+                    </div>
+                    <i class="fas fa-network-wired text-gray-700 text-2xl"></i>
+                </div>
+                <p class="text-xs text-purple-400 mt-2" id="stat-sessions-total">0 Total Sessions</p>
+            </div>
+        </div>
+
+        </div>
+
+        <!-- COMMAND CENTER -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 relative z-10">
+            <!-- BROADCAST -->
+            <div class="glass p-5 rounded-lg border-l-4 border-yellow-500 card">
+                <h3 class="font-bold text-gray-300 mb-3"><i class="fas fa-bullhorn mr-2"></i> GLOBAL BROADCAST</h3>
+                <div class="flex gap-2">
+                    <input type="text" id="broadcast-msg" placeholder="SYSTEM ALERT MESSAGE..."
+                        class="flex-1 bg-black/50 border border-gray-700 rounded px-3 py-2 text-sm focus:border-yellow-500 outline-none text-yellow-500">
+                    <button onclick="sendBroadcast()"
+                        class="bg-yellow-600 hover:bg-yellow-500 text-black font-bold px-4 py-2 rounded text-sm transition">SEND</button>
+                </div>
+            </div>
+
+            <!-- SYSTEM LOGS (Real-Time) -->
+            <div class="glass p-5 rounded-lg border-l-4 border-gray-500 card flex flex-col h-full">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="font-bold text-gray-300"><i class="fas fa-terminal mr-2"></i> SYSTEM LOGS</h3>
+                    <div class="flex gap-2">
+                        <span class="text-[0.6rem] bg-gray-800 px-2 rounded text-red-500">ERRORS</span>
+                        <span class="text-[0.6rem] bg-gray-800 px-2 rounded text-blue-400">AUTH</span>
+                    </div>
+                </div>
+                <div class="flex-1 bg-black/50 rounded p-2 text-[0.6rem] font-mono overflow-hidden relative">
+                    <div id="logs-container" class="absolute inset-0 p-2 overflow-y-auto space-y-1">
+                        <div class="text-gray-500 animate-pulse">Initializing Log Stream...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLE SECTION -->
+        <div class="glass rounded-lg overflow-hidden relative z-10">
+            <div class="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-black/20">
+                <h3 class="font-bold text-gray-300"><i class="fas fa-network-wired mr-2"></i> NETWORK TRAFFIC</h3>
+                <span class="text-xs text-gray-500 animate-pulse"><i class="fas fa-sync fa-spin mr-1"></i> LIVE
+                    FEED</span>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr class="text-gray-500 border-b border-gray-800 uppercase text-xs">
+                            <th class="px-6 py-3">Identity</th>
+                            <th class="px-6 py-3">Device / IP</th>
+                            <th class="px-6 py-3">Cycle</th> <!-- NEW -->
+                            <th class="px-6 py-3">Paid</th> <!-- NEW -->
+                            <th class="px-6 py-3">Status</th>
+                            <th class="px-6 py-3 text-center">Msgs</th>
+                            <th class="px-6 py-3">Last Seen</th>
+                            <th class="px-6 py-3">Created</th>
+                            <th class="px-6 py-3 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-800 text-gray-300" id="users-table">
+                        <!-- ROWS -->
+                        <tr>
+                            <td colspan="6" class="px-6 py-4 text-center text-gray-600">Scanning network...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="p-4 border-t border-gray-800 text-center text-xs text-gray-600 bg-black/50">
+        Vif Admin Console v1.0 // Secured by Fernet-256
+        <div class="mt-1 opacity-50">Made with <i class="fas fa-heart text-red-900"></i> by Jo</div>
+    </footer>
+
+    <!-- CHAT VIEWER MODAL -->
+    <div id="chat-modal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm hidden">
+        <div
+            class="glass w-full max-w-4xl h-[80vh] flex flex-col rounded-lg border border-gray-700 m-4 relative shadow-2xl shadow-red-900/20">
+            <div class="flex justify-between items-center p-4 border-b border-gray-700 bg-black/40 rounded-t-lg">
+                <h3 class="font-bold text-lg text-white tracking-widest">
+                    <i class="fas fa-satellite-dish mr-2 text-red-500 animate-pulse"></i>
+                    INTERCEPTED COMMS: <span id="modal-username" class="text-blue-400">TARGET</span>
+                </h3>
+                <button onclick="document.getElementById('chat-modal').classList.add('hidden')"
+                    class="text-gray-400 hover:text-white transition">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div id="modal-content" class="flex-1 overflow-y-auto p-6 space-y-4 bg-black/40 inner-shadow">
+                <!-- Content Injected via JS -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString();
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/admin/data');
+                if (!res.ok) {
+                    if (res.status === 401 || res.status === 403) window.location.href = '/login.html';
+                    return;
+                }
+                const data = await res.json();
+
+                // UPDATE STATS
+                document.getElementById('stat-cpu').innerText = data.stats.cpu + '%';
+                document.getElementById('bar-cpu').style.width = data.stats.cpu + '%';
+
+                document.getElementById('stat-ram').innerText = data.stats.ram + '%';
+                document.getElementById('bar-ram').style.width = data.stats.ram + '%';
+
+                document.getElementById('stat-users').innerText = data.users.length;
+                document.getElementById('stat-users-new').innerText = `+ ${data.stats.new_users_24h} in 24h`;
+
+                document.getElementById('stat-online').innerText = data.stats.online_now;
+                document.getElementById('stat-sessions-total').innerText = `${data.stats.total_sessions} Encrypted Channels`;
+
+                // UPDATE TABLE
+                const tbody = document.getElementById('users-table');
+                tbody.innerHTML = '';
+
+                data.users.forEach(u => {
+                    const row = document.createElement('tr');
+                    row.className = 'hover:bg-white/5 transition';
+
+                    // Status Badge
+                    let statusHtml = '';
+                    if (u.has_paid) {
+                        statusHtml = '<span class="px-2 py-0.5 rounded text-xs bg-green-900/50 text-green-400 border border-green-900">PREMIUM</span>';
+                    } else {
+                        statusHtml = '<span class="px-2 py-0.5 rounded text-xs bg-gray-800 text-gray-400 border border-gray-700">GUEST</span>';
+                    }
+
+                    // Special Admin Badge
+                    if (u.username === 'Admin') { // Check config name ideally
+                        statusHtml = '<span class="px-2 py-0.5 rounded text-xs bg-red-900/50 text-red-400 border border-red-900">ROOT</span>';
+                    }
+
+                    let actionsHtml = '';
+                    if (u.username !== 'Admin') {
+                        actionsHtml = `
+                            <div class="flex justify-end gap-2">
+                                <button onclick="viewChats('${u.username}')" class="px-2 py-1 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 border border-gray-600 text-xs" title="Inspect Comms">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button onclick="togglePremium('${u.username}')" class="px-2 py-1 bg-blue-900/30 text-blue-400 rounded hover:bg-blue-900 border border-blue-900 text-xs" title="Toggle Premium">
+                                    <i class="fas fa-dollar-sign"></i>
+                                </button>
+                                <button onclick="deleteUser('${u.username}')" class="px-2 py-1 bg-red-900/30 text-red-400 rounded hover:bg-red-900 border border-red-900 text-xs" title="Terminate Identity">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                         `;
+                    }
+
+                    // Simple UA Parser
+                    let device = "Unknown";
+                    if (u.user_agent) {
+                        if (u.user_agent.includes("Windows")) device = "Windows PC";
+                        else if (u.user_agent.includes("Mac")) device = "Mac";
+                        else if (u.user_agent.includes("Linux")) device = "Linux";
+                        else if (u.user_agent.includes("Android")) device = "Android";
+                        else if (u.user_agent.includes("iPhone")) device = "iPhone";
+                    }
+
+                    let expiryDate = u.subscription_expiry ? new Date(u.subscription_expiry) : null;
+                    let isExpired = expiryDate && expiryDate < new Date();
+                    let expiryHtml = '<span class="text-gray-600">Never</span>';
+
+                    if (expiryDate) {
+                        let daysLeft = Math.ceil((expiryDate - new Date()) / (1000 * 60 * 60 * 24));
+                        let color = daysLeft < 5 ? 'text-red-400' : 'text-green-400';
+                        if (isExpired) color = 'text-gray-500 line-through';
+                        expiryHtml = `<div class="${color} text-xs font-mono">${expiryDate.toLocaleDateString()}</div>
+                                      <div class="text-[0.6rem] opacity-50">${isExpired ? 'EXPIRED' : daysLeft + ' days left'}</div>`;
+                    }
+
+                    // Payment Badge
+                    let paymentHtml = `<span class="text-gray-600">-</span>`;
+                    if (u.payment_count > 0) {
+                        paymentHtml = `<span class="px-2 py-0.5 bg-yellow-900/40 text-yellow-500 border border-yellow-800 rounded text-xs font-mono">${u.payment_count}x</span>`;
+                    }
+
+                    row.innerHTML = `
+                        <td class="px-6 py-4 font-bold text-white">${u.username}</td>
+                        <td class="px-6 py-4 font-mono text-xs text-gray-400">
+                            <div class="text-white">${device}</div>
+                            <div class="opacity-50">${u.ip_address || 'Unknown'}</div>
+                        </td>
+                        <td class="px-6 py-4">${expiryHtml}</td>
+                        <td class="px-6 py-4">${paymentHtml}</td>
+                        <td class="px-6 py-4">${statusHtml}</td>
+                        <td class="px-6 py-4 text-center font-bold font-mono text-lg">${u.msg_count || 0}</td>
+                        <td class="px-6 py-4 text-gray-400">${u.last_login ? new Date(u.last_login).toLocaleString() : 'Never'}</td>
+                        <td class="px-6 py-4 text-gray-500 text-xs">${new Date(u.created_at).toLocaleDateString()}</td>
+                        <td class="px-6 py-4 text-right">${actionsHtml}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+            } catch (e) {
+                console.error("Dashboard Sync Error:", e);
+            }
+        }
+
+        async function togglePremium(username) {
+            // DIRECT ACTION - NO CONFIRMATION
+            try {
+                const res = await fetch(`/api/admin/users/${username}/toggle_premium`, { method: 'POST' });
+                if (res.ok) fetchData();
+                else console.error('Action Failed');
+            } catch (e) { console.error(e); }
+        }
+
+        async function deleteUser(username) {
+            if (!confirm(`PERMANENTLY DELETE USER: ${username}?`)) return;
+
+            try {
+                const res = await fetch(`/api/admin/users/${username}`, { method: 'DELETE' });
+                if (res.ok) fetchData();
+                else alert('Elimination Failed');
+            } catch (e) { console.error(e); }
+        }
+
+        async function sendBroadcast() {
+            const msg = document.getElementById('broadcast-msg').value;
+            if (!msg.trim()) return;
+            try {
+                await fetch('/api/admin/broadcast', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg })
+                });
+                document.getElementById('broadcast-msg').value = '';
+                fetchLogs();
+            } catch (e) { console.error(e); }
+        }
+
+        async function viewChats(username) {
+            const modal = document.getElementById('chat-modal');
+            document.getElementById('modal-username').innerText = username;
+            const contentDiv = document.getElementById('modal-content');
+            contentDiv.innerHTML = '<div class=\"text-gray-500 animate-pulse text-center py-10\">Decrypting transmissions...</div>';
+            modal.classList.remove('hidden');
+
+            try {
+                const res = await fetch(`/api/admin/users/${username}/chat_history`);
+                if (!res.ok) {
+                    contentDiv.innerHTML = '<div class=\"text-red-500 text-center py-10\">Access Denied or No Data</div>';
+                    return;
+                }
+                const data = await res.json();
+
+                if (!data.history || data.history.length === 0) {
+                    contentDiv.innerHTML = '<div class=\"text-gray-500 text-center py-10\">No intercepted communications found.</div>';
+                    return;
+                }
+
+                let html = '';
+                data.history.forEach(session => {
+                    html += `<div class="mb-4 border-b border-gray-700 pb-3">
+                        <div class="text-xs text-gray-500 mb-2 font-mono">SESSION: ${session.title || 'Untitled'} | ${new Date(session.created_at).toLocaleDateString()}</div>`;
+                    session.messages.forEach(msg => {
+                        const isUser = msg.role === 'user';
+                        const shortContent = msg.content.length > 500 ? msg.content.substring(0, 500) + '...' : msg.content;
+                        html += `
+                            <div class="flex ${isUser ? 'justify-end' : 'justify-start'} mb-2">
+                                <div class="max-w-[80%] p-3 rounded-lg ${isUser ? 'bg-blue-900/30 border border-blue-900' : 'bg-gray-800 border border-gray-700'}">
+                                    <div class="text-xs ${isUser ? 'text-blue-400' : 'text-red-400'} mb-1 font-bold">${isUser ? 'TARGET' : 'AI_RESPONSE'}</div>
+                                    <div class="text-gray-200 text-sm whitespace-pre-wrap">${shortContent}</div>
+                                    ${msg.timestamp ? `<div class="text-[0.6rem] text-gray-500 mt-2">${new Date(msg.timestamp).toLocaleString()}</div>` : ''}
+                                </div>
+                            </div>`;
+                    });
+                    html += '</div>';
+                });
+                contentDiv.innerHTML = html;
+            } catch (e) {
+                contentDiv.innerHTML = '<div class=\"text-red-500 text-center py-10\">Interception Failed: ' + e.message + '</div>';
+            }
+        }
+
+        async function fetchLogs() {
+            try {
+                const res = await fetch('/api/admin/logs');
+                if (!res.ok) return;
+                const data = await res.json();
+                const container = document.getElementById('logs-container');
+                if (data.logs && data.logs.length > 0) {
+                    container.innerHTML = data.logs.map(log => {
+                        let color = 'text-gray-400';
+                        if (log.level === 'ERROR') color = 'text-red-400';
+                        if (log.level === 'AUTH') color = 'text-blue-400';
+                        if (log.level === 'PAYMENT') color = 'text-yellow-400';
+                        return `<div class="${color}">[${log.timestamp || 'NOW'}] ${log.level}: ${log.message}</div>`;
+                    }).join('');
+                    container.scrollTop = container.scrollHeight;
+                }
+            } catch (e) { console.error('Log fetch error:', e); }
+        }
+
+        // Auto-Refresh (Slower to allow clicking)
+        fetchData();
+        fetchLogs();
+        setInterval(fetchData, 4000); // 4 Seconds - Prevents UI Glitches
+        setInterval(fetchLogs, 5000); // 5 Seconds
+    </script>
+</body>
+
+</html>

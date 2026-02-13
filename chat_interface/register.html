@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vif - Register</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Jersey+15&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --bg-color: #050505;
+            --surface-color: #0a0a0a;
+            --border-color: #222;
+            --accent-color: #ef4444;
+            /* Vif Red */
+            --text-color: #e5e5e5;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        /* Matrix/Scanline Background */
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.2) 50%, rgba(0, 0, 0, 0.2));
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            background: var(--surface-color);
+            padding: 40px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 380px;
+            text-align: center;
+            box-shadow: 0 10px 50px rgba(0, 0, 0, 0.8);
+        }
+
+        h1 {
+            font-family: 'Jersey 15', monospace;
+            font-size: 3rem;
+            color: #fff;
+            margin: 0 0 10px 0;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #fff;
+            font-family: inherit;
+            outline: none;
+            box-sizing: border-box;
+            transition: all 0.2s;
+        }
+
+        input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent-color);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            filter: brightness(110%);
+        }
+
+        .links {
+            margin-top: 20px;
+            font-size: 0.8rem;
+        }
+
+        a {
+            color: #666;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        a:hover {
+            color: var(--accent-color);
+        }
+
+        #error-msg {
+            color: #ef4444;
+            font-size: 0.8rem;
+            margin-top: 15px;
+            display: none;
+        }
+
+        #success-msg {
+            color: #10b981;
+            font-size: 0.8rem;
+            margin-top: 15px;
+            display: none;
+        }
+
+        @media (max-width: 480px) {
+            body {
+                align-items: flex-start;
+                padding-top: 6vh;
+            }
+
+            .container {
+                width: 92%;
+                padding: 28px 20px;
+                border-radius: 8px;
+            }
+
+            h1 {
+                font-size: 2.2rem;
+            }
+
+            .subtitle {
+                font-size: 0.75rem;
+                margin-bottom: 22px;
+            }
+
+            input {
+                padding: 11px;
+                font-size: 0.85rem;
+            }
+
+            button {
+                padding: 12px;
+                font-size: 0.85rem;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .container {
+                width: 96%;
+                padding: 22px 14px;
+            }
+
+            h1 {
+                font-size: 1.8rem;
+            }
+        }
+
+        @media (min-height: 700px) and (max-width: 480px) {
+            body {
+                align-items: center;
+                padding-top: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="scanlines"></div>
+    <div class="container">
+        <h1>Vif</h1>
+        <div class="subtitle">Secure Registration Protocol</div>
+
+        <form id="registerForm" onsubmit="handleRegister(event)">
+            <div class="input-group">
+                <label>USERNAME</label>
+                <input type="text" id="username" required autocomplete="off" placeholder="Choose a codename...">
+            </div>
+
+            <div class="input-group">
+                <label>PASSWORD</label>
+                <input type="password" id="password" required placeholder="••••••••">
+            </div>
+
+            <div class="input-group">
+                <label>CONFIRM PASSWORD</label>
+                <input type="password" id="confirm_password" required placeholder="••••••••">
+            </div>
+
+            <button type="submit" id="btn-submit">
+                <i class="fas fa-user-plus"></i> CREATE ACCOUNT
+            </button>
+        </form>
+
+        <div id="error-msg"></div>
+        <div id="success-msg">Account created successfully. Redirecting...</div>
+
+        <div class="links">
+            Already have an identity? <a href="login.html">Login here</a>
+        </div>
+
+        <div style="margin-top:25px; padding-top:15px; border-top:1px solid #222; font-size:0.6rem; color:#444;">
+            Made with <i class="fas fa-heart" style="color:#ef4444;"></i> by Jo
+        </div>
+    </div>
+
+    <script>
+        async function handleRegister(e) {
+            e.preventDefault();
+
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value;
+            const confirm = document.getElementById('confirm_password').value;
+            const errorDiv = document.getElementById('error-msg');
+            const successDiv = document.getElementById('success-msg');
+            const btn = document.getElementById('btn-submit');
+
+            errorDiv.style.display = 'none';
+
+            if (pass !== confirm) {
+                errorDiv.innerText = "Passwords do not match.";
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (pass.length < 6) {
+                errorDiv.innerText = "Password too weak (min 6 chars).";
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ENCRYPTING...';
+
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user, password: pass })
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    successDiv.style.display = 'block';
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1500);
+                } else {
+                    errorDiv.innerText = data.error || "Registration failed.";
+                    errorDiv.style.display = 'block';
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-user-plus"></i> CREATE ACCOUNT';
+                }
+            } catch (err) {
+                errorDiv.innerText = "Server Unreachable.";
+                errorDiv.style.display = 'block';
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-user-plus"></i> CREATE ACCOUNT';
+            }
+        }
+    </script>
+</body>
+
+</html>

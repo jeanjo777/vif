@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(gh auth status:*)",
-      "Bash(git rebase:*)"
+      "Bash(git rebase:*)",
+      "Bash(docker build:*)"
+    ],
+    "additionalDirectories": [
+      "e:\\god\\vif"
     ]
   }
 }

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACCESS GATEWAY // VIF</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #050505;
+            color: #d4d4d4;
+            font-family: 'JetBrains Mono', monospace;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 420px;
+            width: 100%;
+            padding: 40px 30px;
+            border: 1px solid #333;
+            background: #0a0a0a;
+            box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+            position: relative;
+            border-radius: 12px;
+        }
+
+        .shield-icon {
+            font-size: 2.5rem;
+            color: #ef4444;
+            margin-bottom: 15px;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            margin-bottom: 5px;
+            color: #ef4444;
+            letter-spacing: -0.5px;
+            text-transform: uppercase;
+        }
+
+        .subtitle {
+            font-size: 0.7rem;
+            color: #666;
+            margin-bottom: 25px;
+            border-bottom: 1px solid #222;
+            padding-bottom: 15px;
+        }
+
+        .plan-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid #1f2937;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+        }
+
+        .plan-badge {
+            font-size: 0.65rem;
+            color: #fcd34d;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+
+        .plan-price {
+            font-size: 2.5rem;
+            color: #fff;
+            font-weight: bold;
+            line-height: 1;
+        }
+
+        .plan-price span {
+            font-size: 1rem;
+            color: #888;
+            font-weight: normal;
+        }
+
+        .plan-period {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .features {
+            text-align: left;
+            margin: 20px 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .features li {
+            font-size: 0.75rem;
+            color: #aaa;
+            padding: 6px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .features li i {
+            color: #10b981;
+            font-size: 0.7rem;
+        }
+
+        .btn-subscribe {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            letter-spacing: 1px;
+        }
+
+        .btn-subscribe:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-subscribe:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .secure-badge {
+            margin-top: 15px;
+            font-size: 0.6rem;
+            color: #555;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .secure-badge i {
+            color: #10b981;
+        }
+
+        .btn-back {
+            background: #111;
+            border: 1px solid #333;
+            color: #aaa;
+            font-family: inherit;
+            cursor: pointer;
+            font-size: 0.8rem;
+            padding: 12px;
+            border-radius: 4px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.2s;
+            margin-top: 15px;
+        }
+
+        .btn-back:hover {
+            border-color: #666;
+            color: #fff;
+            background: #1a1a1a;
+        }
+
+        #error-msg {
+            color: #ef4444;
+            font-size: 0.75rem;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.1) 50%, rgba(0, 0, 0, 0.1));
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="scanlines"></div>
+    <div class="container">
+        <i class="fas fa-shield-alt shield-icon"></i>
+        <h1>Vif Pro Access</h1>
+        <div class="subtitle">SUBSCRIPTION_REQUIRED</div>
+
+        <div class="plan-card">
+            <div class="plan-badge">Monthly Plan</div>
+            <div class="plan-price">$9<span>.99</span></div>
+            <div class="plan-period">per month / billed monthly</div>
+
+            <ul class="features">
+                <li><i class="fas fa-check-circle"></i> Unlimited AI conversations</li>
+                <li><i class="fas fa-check-circle"></i> GPT-4o & advanced models</li>
+                <li><i class="fas fa-check-circle"></i> Web browsing & search</li>
+                <li><i class="fas fa-check-circle"></i> File analysis (PDF, DOCX, images)</li>
+                <li><i class="fas fa-check-circle"></i> Image generation (DALL-E 3)</li>
+                <li><i class="fas fa-check-circle"></i> Cancel anytime</li>
+            </ul>
+        </div>
+
+        <button class="btn-subscribe" id="btn-subscribe" onclick="subscribe()">
+            <i class="fas fa-bolt"></i> SUBSCRIBE NOW
+        </button>
+
+        <div class="secure-badge">
+            <i class="fas fa-lock"></i> Secured by Stripe - 256-bit SSL encryption
+        </div>
+
+        <div id="error-msg"></div>
+
+        <button class="btn-back" onclick="logout()">
+            <i class="fas fa-arrow-left"></i> RETURN TO LOGIN
+        </button>
+
+        <div style="margin-top:25px; padding-top:15px; border-top:1px solid #222; font-size:0.6rem; color:#444;">
+            Made with <i class="fas fa-heart" style="color:#ef4444;"></i> by Jo
+        </div>
+    </div>
+
+    <script>
+        async function subscribe() {
+            const btn = document.getElementById('btn-subscribe');
+            const errorDiv = document.getElementById('error-msg');
+            errorDiv.style.display = 'none';
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> REDIRECTING TO STRIPE...';
+
+            try {
+                const res = await fetch('/api/create-checkout-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const data = await res.json();
+
+                if (data.url) {
+                    window.location.href = data.url;
+                } else {
+                    errorDiv.innerText = data.error || 'Failed to create checkout session';
+                    errorDiv.style.display = 'block';
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-bolt"></i> SUBSCRIBE NOW';
+                }
+            } catch (err) {
+                errorDiv.innerText = 'Server unreachable';
+                errorDiv.style.display = 'block';
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-bolt"></i> SUBSCRIBE NOW';
+            }
+        }
+
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
+            window.location.href = '/login.html';
+        }
+    </script>
+</body>
+
+</html>
