@@ -47,3 +47,6 @@ httpx>=0.25.0
 # Additional utilities
 python-multipart
 itsdangerous
+
+# Web automation (Playwright)
+playwright>=1.40.0
