@@ -227,6 +227,8 @@ class ConnectionWrapper:
             db_pool.putconn(self._conn)
 
 def get_db_connection():
+    if db_pool is None:
+        raise Exception("Database connection pool not available")
     raw_conn = db_pool.getconn()
     return ConnectionWrapper(raw_conn)
 
@@ -820,9 +822,25 @@ def login():
         data = request.json
         username = data.get('username')
         password = data.get('password')
-        
+
         if not username or not password:
             return jsonify({'error': 'Credentials required'}), 400
+
+        # FALLBACK MODE: If no database, allow admin login with ACCESS_PASSWORD
+        if db_pool is None:
+            admin_username = get_env_var('ADMIN_USERNAME', 'Admin')
+            admin_password = get_env_var('ACCESS_PASSWORD', 'admin123')
+
+            if username == admin_username and password == admin_password:
+                session['logged_in'] = True
+                session['username'] = username
+                session['has_paid'] = True
+                session['credits'] = 9999
+                session.permanent = True
+                print(f"✅ Admin login (fallback mode): {username}", flush=True)
+                return jsonify({'success': True, 'has_paid': True, 'credits': 9999, 'mode': 'fallback'})
+            else:
+                return jsonify({'success': False, 'error': 'Database unavailable. Only admin login allowed.'}), 503
 
         conn = get_db_connection()
         user = conn.execute('SELECT * FROM users WHERE username = %s', (username,)).fetchone()
