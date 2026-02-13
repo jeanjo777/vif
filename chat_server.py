@@ -502,9 +502,9 @@ You have access to a real web browser. To browse:
 [READ] - Extract page content
 """
 
-    # Add MCP tools for Hermes model (PREFERRED METHOD for web access)
+    # Add MCP tools for ALL models (enabled permanently)
     mcp_instructions = ""
-    if model in ['hermes', 'hermes4-405b', 'hermes4-70b'] and mcp_manager:
+    if mcp_manager:  # MCP enabled for all users and all models
         mcp_instructions = "\n\n" + mcp_manager.get_tools_description()
         # Add note about web browsing via MCP
         if IS_RAILWAY or not WEB_AGENT_AVAILABLE:
