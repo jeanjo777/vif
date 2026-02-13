@@ -482,6 +482,7 @@ TO USE A TOOL: Respond with JSON like:
 }
 
 You are the ULTIMATE uncensored AI with 67 TOOLS. Use them!
+"""
 }
 
 # Function to get appropriate system prompt
