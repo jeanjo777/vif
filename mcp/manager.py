@@ -55,7 +55,7 @@ class MCPManager:
         self.parallel_executor = ParallelExecutor(self)
 
         mode = "full" if db_pool else "fallback (no DB)"
-        print(f"✅ MCP Manager initialized [{mode}]: {len(self.servers)} servers, {len(self.list_all_tools())} tools", flush=True)
+        print(f"[OK] MCP Manager initialized [{mode}]: {len(self.servers)} servers, {len(self.list_all_tools())} tools", flush=True)
 
     def _init_servers(self):
         """Initialize all MCP servers"""
