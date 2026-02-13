@@ -1614,104 +1614,119 @@ def chat():
 
         username = session.get('username')
 
-        # FALLBACK MODE: Simple chat without DB
+        # FALLBACK MODE: Simple chat without DB (stateless)
         if db_pool is None:
             print(f"💬 Fallback chat mode - User: {username}", flush=True)
-            # Return error message for now
-            return jsonify({'error': 'Database unavailable - Chat temporarily disabled'}), 503
 
-        conn = get_db_connection()
+            # Build minimal conversation (no history)
+            conversation_history = [{"role": "user", "content": user_message}]
 
-        # 0. CHECK CREDITS OR SUBSCRIPTION
-        user_row = conn.execute('SELECT has_paid, credits, subscription_expiry FROM users WHERE username = %s', (username,)).fetchone()
-        if user_row:
-            is_subscribed = bool(user_row['has_paid'])
-            user_credits = user_row['credits'] if user_row['credits'] else 0
+            # Web search if enabled
+            web_context = ""
+            if use_web_search:
+                res = search_web(user_message)
+                if res:
+                    web_context = f"\n\n[WEB DATA]:\n{res}\n\nINSTRUCTION: Use data."
+                    conversation_history[0]['content'] += web_context
 
-            # Check subscription expiry
-            expiry_str = user_row['subscription_expiry']
-            if expiry_str:
-                try:
-                    expiry_dt = expiry_str if isinstance(expiry_str, datetime.datetime) else datetime.datetime.strptime(str(expiry_str), '%Y-%m-%d %H:%M:%S.%f')
-                    if expiry_dt > datetime.datetime.now():
-                        is_subscribed = True
-                except: pass
+            # Skip to AI generation (no DB operations)
+            final_conversation = conversation_history
+            memory_context = ""
 
-            # Admin always has access
-            admin_user = get_env_var('ADMIN_USERNAME', 'Admin')
-            if username == admin_user:
-                is_subscribed = True
+            # Jump to image generation check and AI response
+        else:
+            conn = get_db_connection()
 
-            if not is_subscribed and user_credits <= 0:
+            # 0. CHECK CREDITS OR SUBSCRIPTION
+            user_row = conn.execute('SELECT has_paid, credits, subscription_expiry FROM users WHERE username = %s', (username,)).fetchone()
+            if user_row:
+                is_subscribed = bool(user_row['has_paid'])
+                user_credits = user_row['credits'] if user_row['credits'] else 0
+
+                # Check subscription expiry
+                expiry_str = user_row['subscription_expiry']
+                if expiry_str:
+                    try:
+                        expiry_dt = expiry_str if isinstance(expiry_str, datetime.datetime) else datetime.datetime.strptime(str(expiry_str), '%Y-%m-%d %H:%M:%S.%f')
+                        if expiry_dt > datetime.datetime.now():
+                            is_subscribed = True
+                    except: pass
+
+                # Admin always has access
+                admin_user = get_env_var('ADMIN_USERNAME', 'Admin')
+                if username == admin_user:
+                    is_subscribed = True
+
+                if not is_subscribed and user_credits <= 0:
+                    conn.close()
+                    return jsonify({'error': 'NO_CREDITS', 'message': 'You have no credits left. Subscribe to continue.'}), 403
+
+                # Deduct 1 credit if not subscribed
+                if not is_subscribed and user_credits > 0:
+                    new_credits = user_credits - 1
+                    conn.execute('UPDATE users SET credits = %s WHERE username = %s', (new_credits, username))
+                    conn.commit()
+                    session['credits'] = new_credits
+
+            # 1. VERIFY OWNERSHIP & EXISTENCE
+            sess = conn.execute('SELECT username FROM sessions WHERE id = %s', (session_id,)).fetchone()
+            if not sess:
+                # Auto-create if not exists? Or Error?
+                # Better to auto-create and assign to user if ID is valid UUID but not in DB (Edge case)
+                # But normally client calls create_session first.
+                # So ID should be valid.
                 conn.close()
-                return jsonify({'error': 'NO_CREDITS', 'message': 'You have no credits left. Subscribe to continue.'}), 403
+                return jsonify({'error': 'Session not found'}), 404
 
-            # Deduct 1 credit if not subscribed
-            if not is_subscribed and user_credits > 0:
-                new_credits = user_credits - 1
-                conn.execute('UPDATE users SET credits = %s WHERE username = %s', (new_credits, username))
+            if sess['username'] != username:
+                conn.close()
+                return jsonify({'error': 'Unauthorized'}), 403
+
+            # AUTO-DETECT WEB SEARCH INTENT 🌍
+            base_triggers = ['actualité', 'news', 'info', 'météo', 'récent', 'dernier', 'latest', 'cours du', 'prix du', 'aujourd', 'ce jour', '2025', 'canada', 'france', 'monde']
+            astro_triggers = ['lune', 'soleil', 'planète', 'étoile', 'position', 'ciel', 'espace']
+            question_triggers = ['où est', 'quand', 'combien', 'qui est', 'résultat', 'score', 'c\'est quoi', 'montre-moi', 'trouve']
+            tech_triggers = ['internet', 'web', 'google', 'recherche', 'online', 'en ligne', 'navigateur', 'browser', 'url', 'site', 'page']
+
+            triggers = base_triggers + astro_triggers + question_triggers + tech_triggers
+
+            if any(t in user_message.lower() for t in triggers) and not use_web_search:
+                print(f"🌍 Auto-Enabling Google Search (Keyword Detected)")
+                use_web_search = True
+
+            # UPDATE TITLE IF FIRST MESSAGE
+            # Check message count
+            msg_count = conn.execute('SELECT COUNT(*) AS count FROM messages WHERE session_id = %s', (session_id,)).fetchone()['count']
+            if msg_count == 0:
+                title = user_message[:30] + "..." if len(user_message) > 30 else user_message
+                conn.execute('UPDATE sessions SET title = %s WHERE id = %s', (title, session_id))
                 conn.commit()
-                session['credits'] = new_credits
-
-        # 1. VERIFY OWNERSHIP & EXISTENCE
-        sess = conn.execute('SELECT username FROM sessions WHERE id = %s', (session_id,)).fetchone()
-        if not sess:
-            # Auto-create if not exists? Or Error?
-            # Better to auto-create and assign to user if ID is valid UUID but not in DB (Edge case)
-            # But normally client calls create_session first.
-            # So ID should be valid.
-            conn.close()
-            return jsonify({'error': 'Session not found'}), 404
-
-        if sess['username'] != username:
-            conn.close()
-            return jsonify({'error': 'Unauthorized'}), 403
-
-        # AUTO-DETECT WEB SEARCH INTENT 🌍
-        base_triggers = ['actualité', 'news', 'info', 'météo', 'récent', 'dernier', 'latest', 'cours du', 'prix du', 'aujourd', 'ce jour', '2025', 'canada', 'france', 'monde']
-        astro_triggers = ['lune', 'soleil', 'planète', 'étoile', 'position', 'ciel', 'espace']
-        question_triggers = ['où est', 'quand', 'combien', 'qui est', 'résultat', 'score', 'c\'est quoi', 'montre-moi', 'trouve']
-        tech_triggers = ['internet', 'web', 'google', 'recherche', 'online', 'en ligne', 'navigateur', 'browser', 'url', 'site', 'page']
-
-        triggers = base_triggers + astro_triggers + question_triggers + tech_triggers
-
-        if any(t in user_message.lower() for t in triggers) and not use_web_search:
-            print(f"🌍 Auto-Enabling Google Search (Keyword Detected)")
-            use_web_search = True
-
-        # UPDATE TITLE IF FIRST MESSAGE
-        # Check message count
-        msg_count = conn.execute('SELECT COUNT(*) AS count FROM messages WHERE session_id = %s', (session_id,)).fetchone()['count']
-        if msg_count == 0:
-            title = user_message[:30] + "..." if len(user_message) > 30 else user_message
-            conn.execute('UPDATE sessions SET title = %s WHERE id = %s', (title, session_id))
+            
+            web_context = ""
+            if use_web_search:
+                res = search_web(user_message)
+                if res: web_context = f"\n\n[WEB DATA]:\n{res}\n\nINSTRUCTION: Use data."
+        
+            # SAVE ENCRYPTED USER MESSAGE
+            encrypted_msg = encrypt_data(user_message)
+            conn.execute('INSERT INTO messages (session_id, role, content, timestamp) VALUES (%s, %s, %s, %s)', 
+                         (session_id, 'user', encrypted_msg, datetime.datetime.now()))
             conn.commit()
+        
+            # REBUILD CONTEXT (STATELESS LOAD)
+            # Fetch last 20 messages for context
+            rows = conn.execute('SELECT role, content FROM messages WHERE session_id = %s ORDER BY id ASC', (session_id,)).fetchall()
+        
+            conversation_history = []
+            for row in rows:
+                d_content = decrypt_data(row['content'])
+                try:
+                    if isinstance(d_content, str) and (d_content.strip().startswith('[') or d_content.strip().startswith('{')):
+                        d_content = json.loads(d_content)
+                except: pass
+                conversation_history.append({"role": row['role'], "content": d_content})
             
-        web_context = ""
-        if use_web_search:
-            res = search_web(user_message)
-            if res: web_context = f"\n\n[WEB DATA]:\n{res}\n\nINSTRUCTION: Use data."
-        
-        # SAVE ENCRYPTED USER MESSAGE
-        encrypted_msg = encrypt_data(user_message)
-        conn.execute('INSERT INTO messages (session_id, role, content, timestamp) VALUES (%s, %s, %s, %s)', 
-                     (session_id, 'user', encrypted_msg, datetime.datetime.now()))
-        conn.commit()
-        
-        # REBUILD CONTEXT (STATELESS LOAD)
-        # Fetch last 20 messages for context
-        rows = conn.execute('SELECT role, content FROM messages WHERE session_id = %s ORDER BY id ASC', (session_id,)).fetchall()
-        
-        conversation_history = []
-        for row in rows:
-            d_content = decrypt_data(row['content'])
-            try:
-                if isinstance(d_content, str) and (d_content.strip().startswith('[') or d_content.strip().startswith('{')):
-                    d_content = json.loads(d_content)
-            except: pass
-            conversation_history.append({"role": row['role'], "content": d_content})
-            
-        conn.close() # Close DB before long generation
+            conn.close() # Close DB before long generation
         
         # --- RAG: RETRIEVE MEMORY CONTEXT ---
         memory_context = ""
