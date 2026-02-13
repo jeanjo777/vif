@@ -12,12 +12,10 @@ import { IconButton } from '~/components/ui/IconButton';
 import { toast } from 'react-toastify';
 import { SpeechRecognitionButton } from '~/components/chat/SpeechRecognition';
 import { SupabaseConnection } from './SupabaseConnection';
-import { ExpoQrModal } from '~/components/workbench/ExpoQrModal';
 import styles from './BaseChat.module.scss';
 import type { ProviderInfo } from '~/types/model';
 import { ColorSchemeDialog } from '~/components/ui/ColorSchemeDialog';
 import type { DesignScheme } from '~/types/design-scheme';
-import type { ElementInfo } from '~/components/workbench/Inspector';
 import { McpTools } from './MCPTools';
 
 interface ChatBoxProps {
@@ -43,8 +41,6 @@ interface ChatBoxProps {
   stopListening: () => void;
   chatStarted: boolean;
   exportChat?: () => void;
-  qrModalOpen: boolean;
-  setQrModalOpen: (open: boolean) => void;
   handleFileUpload: () => void;
   setProvider?: ((provider: ProviderInfo) => void) | undefined;
   model?: string | undefined;
@@ -59,15 +55,13 @@ interface ChatBoxProps {
   setChatMode?: (mode: 'discuss' | 'build') => void;
   designScheme?: DesignScheme;
   setDesignScheme?: (scheme: DesignScheme) => void;
-  selectedElement?: ElementInfo | null;
-  setSelectedElement?: ((element: ElementInfo | null) => void) | undefined;
 }
 
 export const ChatBox: React.FC<ChatBoxProps> = React.memo((props) => {
   return (
     <div
       className={classNames(
-        'relative bg-bolt-elements-background-depth-2 backdrop-blur p-3 rounded-lg border border-bolt-elements-borderColor relative w-full max-w-chat mx-auto z-prompt',
+        'relative bg-vif-elements-background-depth-2 backdrop-blur p-3 rounded-lg border border-vif-elements-borderColor relative w-full max-w-chat mx-auto z-prompt',
 
         /*
          * {
@@ -151,7 +145,7 @@ export const ChatBox: React.FC<ChatBoxProps> = React.memo((props) => {
         )}
       </ClientOnly>
       {props.selectedElement && (
-        <div className="flex mx-1.5 gap-2 items-center justify-between rounded-lg rounded-b-none border border-b-none border-bolt-elements-borderColor text-bolt-elements-textPrimary flex py-1 px-2.5 font-medium text-xs">
+        <div className="flex mx-1.5 gap-2 items-center justify-between rounded-lg rounded-b-none border border-b-none border-vif-elements-borderColor text-vif-elements-textPrimary flex py-1 px-2.5 font-medium text-xs">
           <div className="flex gap-2 items-center lowercase">
             <code className="bg-accent-500 rounded-4px px-1.5 py-1 mr-0.5 text-white">
               {props?.selectedElement?.tagName}
@@ -167,14 +161,14 @@ export const ChatBox: React.FC<ChatBoxProps> = React.memo((props) => {
         </div>
       )}
       <div
-        className={classNames('relative shadow-xs border border-bolt-elements-borderColor backdrop-blur rounded-lg')}
+        className={classNames('relative shadow-xs border border-vif-elements-borderColor backdrop-blur rounded-lg')}
       >
         <textarea
           ref={props.textareaRef}
           className={classNames(
-            'w-full pl-4 pt-4 pr-16 outline-none resize-none text-bolt-elements-textPrimary placeholder-bolt-elements-textTertiary bg-transparent text-sm',
+            'w-full pl-4 pt-4 pr-16 outline-none resize-none text-vif-elements-textPrimary placeholder-vif-elements-textTertiary bg-transparent text-sm',
             'transition-all duration-200',
-            'hover:border-bolt-elements-focus',
+            'hover:border-vif-elements-focus',
           )}
           onDragEnter={(e) => {
             e.preventDefault();
@@ -186,11 +180,11 @@ export const ChatBox: React.FC<ChatBoxProps> = React.memo((props) => {
           }}
           onDragLeave={(e) => {
             e.preventDefault();
-            e.currentTarget.style.border = '1px solid var(--bolt-elements-borderColor)';
+            e.currentTarget.style.border = '1px solid var(--vif-elements-borderColor)';
           }}
           onDrop={(e) => {
             e.preventDefault();
-            e.currentTarget.style.border = '1px solid var(--bolt-elements-borderColor)';
+            e.currentTarget.style.border = '1px solid var(--vif-elements-borderColor)';
 
             const files = Array.from(e.dataTransfer.files);
             files.forEach((file) => {
@@ -275,7 +269,7 @@ export const ChatBox: React.FC<ChatBoxProps> = React.memo((props) => {
               }}
             >
               {props.enhancingPrompt ? (
-                <div className="i-svg-spinners:90-ring-with-bg text-bolt-elements-loader-progress text-xl animate-spin"></div>
+                <div className="i-svg-spinners:90-ring-with-bg text-vif-elements-loader-progress text-xl animate-spin"></div>
               ) : (
                 <div className="i-bolt:stars text-xl"></div>
               )}
@@ -291,9 +285,9 @@ export const ChatBox: React.FC<ChatBoxProps> = React.memo((props) => {
             <IconButton
               title="Model Settings"
               className={classNames('transition-all flex items-center gap-1', {
-                'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
+                'bg-vif-elements-item-backgroundAccent text-vif-elements-item-contentAccent':
                   props.isModelSettingsCollapsed,
-                'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
+                'bg-vif-elements-item-backgroundDefault text-vif-elements-item-contentDefault':
                   !props.isModelSettingsCollapsed,
               })}
               onClick={() => props.setIsModelSettingsCollapsed(!props.isModelSettingsCollapsed)}
@@ -304,13 +298,12 @@ export const ChatBox: React.FC<ChatBoxProps> = React.memo((props) => {
             </IconButton>
           </div>
           {props.input.length > 3 ? (
-            <div className="text-xs text-bolt-elements-textTertiary">
-              Use <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Shift</kbd> +{' '}
-              <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Return</kbd> a new line
+            <div className="text-xs text-vif-elements-textTertiary">
+              Use <kbd className="kdb px-1.5 py-0.5 rounded bg-vif-elements-background-depth-2">Shift</kbd> +{' '}
+              <kbd className="kdb px-1.5 py-0.5 rounded bg-vif-elements-background-depth-2">Return</kbd> a new line
             </div>
           ) : null}
           <SupabaseConnection />
-          <ExpoQrModal open={props.qrModalOpen} onClose={() => props.setQrModalOpen(false)} />
         </div>
       </div>
     </div>
