@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 from flask_cors import CORS # IMPORT CORS RESTORED
 from openai import OpenAI
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 from werkzeug.utils import secure_filename
 # Selenium imports (optional - for web scraping features)
 try:
