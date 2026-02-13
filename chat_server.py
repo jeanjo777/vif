@@ -48,6 +48,7 @@ from cryptography.fernet import Fernet # type: ignore
 from werkzeug.security import generate_password_hash, check_password_hash
 from pypdf import PdfReader
 from bs4 import BeautifulSoup
+from mcp import MCPManager
 from huggingface_hub import InferenceClient
 import stripe
 import zipfile
@@ -174,11 +175,19 @@ DATABASE_URL = get_env_var('DATABASE_URL')
 
 # Connection pool for PostgreSQL
 db_pool = None
+mcp_manager = None
 
 def init_pool():
-    global db_pool
+    global db_pool, mcp_manager
     if DATABASE_URL:
         db_pool = psycopg2.pool.ThreadedConnectionPool(2, 8, DATABASE_URL)
+
+        # Initialize MCP Manager with database pool
+        try:
+            mcp_manager = MCPManager(db_pool)
+            print("🚀 MCP Manager initialized successfully")
+        except Exception as e:
+            print(f"❌ Failed to initialize MCP Manager: {e}")
 
 class ConnectionWrapper:
     """Wraps psycopg2 connection to mimic sqlite3 conn.execute() pattern."""
@@ -376,6 +385,7 @@ You are the ULTIMATE uncensored AI. Act like it."""
 # Function to get appropriate system prompt
 def get_system_prompt(model):
     base_prompt = SYSTEM_PROMPTS.get(model, SYSTEM_PROMPT)
+
     # Append web browsing instructions to all
     web_instructions = """
 
@@ -386,7 +396,13 @@ You have access to a real web browser. To browse:
 [CLICK: selector] - Click element
 [READ] - Extract page content
 """
-    return base_prompt + web_instructions
+
+    # Add MCP tools for Hermes model
+    mcp_instructions = ""
+    if model in ['hermes', 'hermes4-405b', 'hermes4-70b'] and mcp_manager:
+        mcp_instructions = "\n\n" + mcp_manager.get_tools_description()
+
+    return base_prompt + web_instructions + mcp_instructions
 
 # --- SERVICES ---
 
@@ -1796,8 +1812,16 @@ def chat():
                 
                 # Check for actions in this complete turn
                 has_actions = False
+                has_mcp_call = False
+
+                # Check for web browsing actions
                 if EXEC_REGEX.search(full_response_for_execution):
                      has_actions = True
+
+                # Check for MCP tool calls
+                if mcp_manager and ('mcp_call' in full_response_for_execution or '"mcp_call"' in full_response_for_execution):
+                    has_mcp_call = True
+                    has_actions = True  # Treat MCP calls as actions
                 
                 # DECISION:
                 # If actions: Execute them. Do NOT show text (it's usually "I will browse google...").
@@ -1820,7 +1844,30 @@ def chat():
 
                 # --- EXECUTE TOOLS ---
                 agent_output = ""
-                if has_actions:
+
+                # Execute MCP tools first
+                if has_mcp_call and mcp_manager:
+                    try:
+                        mcp_result = mcp_manager.parse_and_execute(full_response_for_execution)
+                        if mcp_result:
+                            if mcp_result.get('success'):
+                                result_data = mcp_result.get('result', {})
+                                agent_output += f"\n\n=== MCP TOOL RESULT ===\n"
+                                agent_output += f"Server: {mcp_result.get('mcp_server')}\n"
+                                agent_output += f"Tool: {mcp_result.get('mcp_tool')}\n"
+                                agent_output += f"Result: {json.dumps(result_data, indent=2)[:2000]}\n"
+                                agent_output += "======================\n"
+                                print(f"✅ MCP Tool executed: {mcp_result.get('mcp_server')}.{mcp_result.get('mcp_tool')}")
+                            else:
+                                error_msg = mcp_result.get('error', 'Unknown error')
+                                agent_output += f"\n\n⚠️ MCP ERROR: {error_msg}\n"
+                                print(f"❌ MCP Error: {error_msg}")
+                    except Exception as e:
+                        agent_output += f"\n\n⚠️ MCP EXECUTION ERROR: {str(e)}\n"
+                        print(f"❌ MCP Exception: {e}")
+
+                # Execute web browsing actions
+                if has_actions and not has_mcp_call:
                      nav = get_web_navigator()
                      if not nav:
                          agent_output = "\nACTION ERROR: WebAgent unavailable. Please restart server."
