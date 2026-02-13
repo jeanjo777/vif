@@ -753,14 +753,20 @@ def admin_broadcast():
 
 @app.route('/api/system/alert')
 def get_system_alert():
-    conn = get_db_connection()
-    # Get latest active alert from last hour
-    alert = conn.execute('''
-        SELECT message, type, created_at FROM system_alerts 
-        WHERE is_active = TRUE 
-        ORDER BY created_at DESC LIMIT 1
-    ''').fetchone()
-    conn.close()
+    if db_pool is None:
+        return jsonify({'alert': None})
+
+    try:
+        conn = get_db_connection()
+        # Get latest active alert from last hour
+        alert = conn.execute('''
+            SELECT message, type, created_at FROM system_alerts
+            WHERE is_active = TRUE
+            ORDER BY created_at DESC LIMIT 1
+        ''').fetchone()
+        conn.close()
+    except:
+        return jsonify({'alert': None})
     
     if alert:
         # Check if expired (e.g. 1 hour)
