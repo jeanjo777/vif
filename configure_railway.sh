@@ -1,0 +1,23 @@
+#!/bin/bash
+# Configure Railway Environment Variables
+
+echo "=== Railway Configuration ==="
+echo ""
+echo "Manual Configuration Required:"
+echo ""
+echo "1. Go to: https://railway.app"
+echo "2. Select Vif project"
+echo "3. Settings → Variables"
+echo "4. Add/Update:"
+echo ""
+echo "DATABASE_URL=postgresql://postgres:VifSecure2026PgDb99@db.hyjzufgsjbyfynlliuia.supabase.co:5432/postgres"
+echo ""
+echo "5. Save and Redeploy"
+echo ""
+echo "=== OR via Railway CLI ==="
+echo ""
+echo "railway login"
+echo "railway link"
+echo "railway variables --set DATABASE_URL=\"postgresql://postgres:VifSecure2026PgDb99@db.hyjzufgsjbyfynlliuia.supabase.co:5432/postgres\""
+echo "railway up"
+echo ""
