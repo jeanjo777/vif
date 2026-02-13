@@ -35,7 +35,7 @@ class MCPManager:
     Handles tool discovery, routing, execution, caching, and agents
     """
 
-    def __init__(self, db_pool, workspace_path: str = "/tmp/vif_workspace"):
+    def __init__(self, db_pool=None, workspace_path: str = "/tmp/vif_workspace"):
         self.servers = {}
         self.db_pool = db_pool
         self.workspace_path = workspace_path
@@ -47,14 +47,15 @@ class MCPManager:
         # Initialize agents
         self.agents = None  # Will be initialized after servers
 
-        # Initialize all MCP servers
+        # Initialize all MCP servers (skip DB-dependent ones if no db_pool)
         self._init_servers()
 
         # Initialize agent orchestrator
         self.agents = AgentOrchestrator(self)
         self.parallel_executor = ParallelExecutor(self)
 
-        print(f"OK: MCP Manager initialized with {len(self.servers)} servers, {len(self.list_all_tools())} tools")
+        mode = "full" if db_pool else "fallback (no DB)"
+        print(f"✅ MCP Manager initialized [{mode}]: {len(self.servers)} servers, {len(self.list_all_tools())} tools", flush=True)
 
     def _init_servers(self):
         """Initialize all MCP servers"""

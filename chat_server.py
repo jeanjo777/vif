@@ -206,21 +206,21 @@ def init_pool():
             print("✅ Database connection pool initialized", flush=True)
             sys.stdout.flush()
 
-            # Initialize MCP Manager with database pool
-            try:
-                mcp_manager = MCPManager(db_pool)
-                print("🚀 MCP Manager initialized successfully", flush=True)
-                sys.stdout.flush()
-            except Exception as e:
-                print(f"❌ Failed to initialize MCP Manager: {e}", flush=True)
-                sys.stdout.flush()
-
         except Exception as e:
             print(f"⚠️ Database connection failed (will retry): {e}", flush=True)
             print("⚠️ Application starting without database - some features unavailable", flush=True)
             sys.stdout.flush()
             db_pool = None
-            mcp_manager = None
+
+    # Always initialize MCP Manager (works with or without database)
+    try:
+        mcp_manager = MCPManager(db_pool)  # db_pool can be None
+        print("🚀 MCP Manager initialized successfully", flush=True)
+        sys.stdout.flush()
+    except Exception as e:
+        print(f"❌ Failed to initialize MCP Manager: {e}", flush=True)
+        sys.stdout.flush()
+        mcp_manager = None
 
 class ConnectionWrapper:
     """Wraps psycopg2 connection to mimic sqlite3 conn.execute() pattern."""
