@@ -1,4 +1,4 @@
-import { createTwoFilesPatch } from 'diff';
+﻿import { createTwoFilesPatch } from 'diff';
 import type { FileMap } from '~/lib/stores/files';
 import { MODIFICATIONS_TAG_NAME, WORK_DIR } from './constants';
 
@@ -90,12 +90,12 @@ export function extractRelativePath(filePath: string) {
  * Example:
  *
  * ```html
- * <bolt_file_modifications>
+ * <vif_file_modifications>
  * <diff path="/home/project/index.js">
  * - console.log('Hello, World!');
- * + console.log('Hello, Bolt!');
+ * + console.log('Hello, Vif\!');
  * </diff>
- * </bolt_file_modifications>
+ * </vif_file_modifications>
  * ```
  */
 export function fileModificationsToHTML(modifications: FileModifications) {

@@ -1,4 +1,4 @@
-import { atom } from 'nanostores';
+﻿import { atom } from 'nanostores';
 
 interface Profile {
   username: string;
@@ -7,7 +7,7 @@ interface Profile {
 }
 
 // Initialize with stored profile or defaults
-const storedProfile = typeof window !== 'undefined' ? localStorage.getItem('bolt_profile') : null;
+const storedProfile = typeof window !== 'undefined' ? localStorage.getItem('vif_profile') : null;
 const initialProfile: Profile = storedProfile
   ? JSON.parse(storedProfile)
   : {
@@ -23,6 +23,6 @@ export const updateProfile = (updates: Partial<Profile>) => {
 
   // Persist to localStorage
   if (typeof window !== 'undefined') {
-    localStorage.setItem('bolt_profile', JSON.stringify(profileStore.get()));
+    localStorage.setItem('vif_profile', JSON.stringify(profileStore.get()));
   }
 };

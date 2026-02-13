@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { classNames } from '~/utils/classNames';
@@ -10,11 +10,11 @@ import { isMac } from '~/utils/os';
 const getModifierSymbol = (modifier: string): string => {
   switch (modifier) {
     case 'meta':
-      return isMac ? '⌘' : 'Win';
+      return isMac ? 'âŒ˜' : 'Win';
     case 'alt':
-      return isMac ? '⌥' : 'Alt';
+      return isMac ? 'âŒ¥' : 'Alt';
     case 'shift':
-      return '⇧';
+      return 'â‡§';
     default:
       return modifier;
   }
@@ -23,7 +23,7 @@ const getModifierSymbol = (modifier: string): string => {
 export default function SettingsTab() {
   const [currentTimezone, setCurrentTimezone] = useState('');
   const [settings, setSettings] = useState<UserProfile>(() => {
-    const saved = localStorage.getItem('bolt_user_profile');
+    const saved = localStorage.getItem('vif_user_profile');
     return saved
       ? JSON.parse(saved)
       : {
@@ -41,7 +41,7 @@ export default function SettingsTab() {
   useEffect(() => {
     try {
       // Get existing profile data
-      const existingProfile = JSON.parse(localStorage.getItem('bolt_user_profile') || '{}');
+      const existingProfile = JSON.parse(localStorage.getItem('vif_user_profile') || '{}');
 
       // Merge with new settings
       const updatedProfile = {
@@ -51,7 +51,7 @@ export default function SettingsTab() {
         timezone: settings.timezone,
       };
 
-      localStorage.setItem('bolt_user_profile', JSON.stringify(updatedProfile));
+      localStorage.setItem('vif_user_profile', JSON.stringify(updatedProfile));
       toast.success('Settings updated');
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -91,15 +91,15 @@ export default function SettingsTab() {
             )}
           >
             <option value="en">English</option>
-            <option value="es">Español</option>
-            <option value="fr">Français</option>
+            <option value="es">EspaÃ±ol</option>
+            <option value="fr">FranÃ§ais</option>
             <option value="de">Deutsch</option>
             <option value="it">Italiano</option>
-            <option value="pt">Português</option>
-            <option value="ru">Русский</option>
-            <option value="zh">中文</option>
-            <option value="ja">日本語</option>
-            <option value="ko">한국어</option>
+            <option value="pt">PortuguÃªs</option>
+            <option value="ru">Ð ÑƒÑÑÐºÐ¸Ð¹</option>
+            <option value="zh">ä¸­æ–‡</option>
+            <option value="ja">æ—¥æœ¬èªž</option>
+            <option value="ko">í•œêµ­ì–´</option>
           </select>
         </div>
 
@@ -119,17 +119,17 @@ export default function SettingsTab() {
                 setSettings((prev) => ({ ...prev, notifications: checked }));
 
                 // Update localStorage immediately
-                const existingProfile = JSON.parse(localStorage.getItem('bolt_user_profile') || '{}');
+                const existingProfile = JSON.parse(localStorage.getItem('vif_user_profile') || '{}');
                 const updatedProfile = {
                   ...existingProfile,
                   notifications: checked,
                 };
-                localStorage.setItem('bolt_user_profile', JSON.stringify(updatedProfile));
+                localStorage.setItem('vif_user_profile', JSON.stringify(updatedProfile));
 
                 // Dispatch storage event for other components
                 window.dispatchEvent(
                   new StorageEvent('storage', {
-                    key: 'bolt_user_profile',
+                    key: 'vif_user_profile',
                     newValue: JSON.stringify(updatedProfile),
                   }),
                 );

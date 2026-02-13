@@ -1,4 +1,4 @@
-import type { WebContainer, WebContainerProcess } from '@webcontainer/api';
+﻿import type { WebContainer, WebContainerProcess } from '@webcontainer/api';
 import type { ITerminal } from '~/types/terminal';
 import { withResolvers } from './promises';
 import { atom } from 'nanostores';
@@ -91,7 +91,7 @@ export async function newShellProcess(webcontainer: WebContainer, terminal: ITer
 
 export type ExecutionResult = { output: string; exitCode: number } | undefined;
 
-export class BoltShell {
+export class VifShell {
   #initialized: (() => void) | undefined;
   #readyPromise: Promise<void>;
   #webcontainer: WebContainer | undefined;
@@ -118,7 +118,7 @@ export class BoltShell {
     this.#terminal = terminal;
 
     // Use all three streams from tee: one for terminal, one for command execution, one for Expo URL detection
-    const { process, commandStream, expoUrlStream } = await this.newBoltShellProcess(webcontainer, terminal);
+    const { process, commandStream, expoUrlStream } = await this.newVifShellProcess(webcontainer, terminal);
     this.#process = process;
     this.#outputStream = commandStream.getReader();
 
@@ -129,7 +129,7 @@ export class BoltShell {
     this.#initialized?.();
   }
 
-  async newBoltShellProcess(webcontainer: WebContainer, terminal: ITerminal) {
+  async newVifShellProcess(webcontainer: WebContainer, terminal: ITerminal) {
     const args: string[] = [];
     const process = await webcontainer.spawn('/bin/jsh', ['--osc', ...args], {
       terminal: {
@@ -351,7 +351,7 @@ export function cleanTerminalOutput(input: string): string {
   // Step 4: Add newlines at key breakpoints while preserving paths
   const formatOutput = cleanNewlines
     // Preserve prompt line
-    .replace(/^([~\/][^\n❯]+)❯/m, '$1\n❯')
+    .replace(/^([~\/][^\nâ¯]+)â¯/m, '$1\nâ¯')
     // Add newline before command output indicators
     .replace(/(?<!^|\n)>/g, '\n>')
     // Add newline before error keywords without breaking paths
@@ -379,6 +379,6 @@ export function cleanTerminalOutput(input: string): string {
     .replace(/\u0000/g, ''); // Remove null characters
 }
 
-export function newBoltShellProcess() {
-  return new BoltShell();
+export function newVifShellProcess() {
+  return new VifShell();
 }

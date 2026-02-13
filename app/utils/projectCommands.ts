@@ -1,4 +1,4 @@
-import type { Message } from 'ai';
+﻿import type { Message } from 'ai';
 import { generateId } from './fileUtils';
 
 export interface ProjectCommands {
@@ -137,7 +137,7 @@ ${commandString}
   };
 }
 
-export function escapeBoltArtifactTags(input: string) {
+export function escapeVifArtifactTags(input: string) {
   // Regular expression to match boltArtifact tags and their content
   const regex = /(<boltArtifact[^>]*>)([\s\S]*?)(<\/boltArtifact>)/g;
 
@@ -153,7 +153,7 @@ export function escapeBoltArtifactTags(input: string) {
   });
 }
 
-export function escapeBoltAActionTags(input: string) {
+export function escapeVifAActionTags(input: string) {
   // Regular expression to match boltArtifact tags and their content
   const regex = /(<boltAction[^>]*>)([\s\S]*?)(<\/boltAction>)/g;
 
@@ -169,8 +169,8 @@ export function escapeBoltAActionTags(input: string) {
   });
 }
 
-export function escapeBoltTags(input: string) {
-  return escapeBoltArtifactTags(escapeBoltAActionTags(input));
+export function escapeVifTags(input: string) {
+  return escapeVifArtifactTags(escapeVifAActionTags(input));
 }
 
 // We have this seperate function to simplify the restore snapshot process in to one single artifact.

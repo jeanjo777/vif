@@ -1,4 +1,4 @@
-import rehypeRaw from 'rehype-raw';
+﻿import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
 import type { PluggableList, Plugin } from 'unified';
 import rehypeSanitize, { defaultSchema, type Options as RehypeSanitizeOptions } from 'rehype-sanitize';
@@ -65,7 +65,7 @@ function remarkThinkRawContent() {
     visit(tree, (node: any) => {
       if (node.type === 'html' && node.value && node.value.startsWith('<think>')) {
         const cleanedContent = node.value.slice(7);
-        node.value = `<div class="__boltThought__">${cleanedContent}`;
+        node.value = `<div class="__vifThought__">${cleanedContent}`;
 
         return;
       }
@@ -86,9 +86,9 @@ const rehypeSanitizeOptions: RehypeSanitizeOptions = {
     div: [
       ...(defaultSchema.attributes?.div ?? []),
       'data*',
-      ['className', '__boltArtifact__', '__boltThought__', '__boltQuickAction', '__boltSelectedElement__'],
+      ['className', '__vifArtifact__', '__vifThought__', '__vifQuickAction', '__vifSelectedElement__'],
 
-      // ['className', '__boltThought__']
+      // ['className', '__vifThought__']
     ],
     button: [
       ...(defaultSchema.attributes?.button ?? []),
@@ -97,7 +97,7 @@ const rehypeSanitizeOptions: RehypeSanitizeOptions = {
       'disabled',
       'name',
       'value',
-      ['className', '__boltArtifact__', '__boltThought__', '__boltQuickAction'],
+      ['className', '__vifArtifact__', '__vifThought__', '__vifQuickAction'],
     ],
   },
   strip: [],

@@ -29,6 +29,7 @@ export const Markdown = memo(
 
     const components = useMemo(() => {
       return {
+
         div: ({ className, children, node, ...props }) => {
           const dataProps = node?.properties as Record<string, unknown>;
 
@@ -191,17 +192,21 @@ export const Markdown = memo(
           return <button {...props}>{children}</button>;
         },
       } satisfies Components;
-    }, []);
+    }, [append, setChatMode, model, provider]);
+
+    const memoizedRemarkPlugins = useMemo(() => remarkPlugins(limitedMarkdown), [limitedMarkdown]);
+    const memoizedRehypePlugins = useMemo(() => rehypePlugins(html), [html]);
+    const processedChildren = useMemo(() => stripCodeFenceFromArtifact(children), [children]);
 
     return (
       <ReactMarkdown
         allowedElements={allowedHTMLElements}
         className={styles.MarkdownContent}
         components={components}
-        remarkPlugins={remarkPlugins(limitedMarkdown)}
-        rehypePlugins={rehypePlugins(html)}
+        remarkPlugins={memoizedRemarkPlugins}
+        rehypePlugins={memoizedRehypePlugins}
       >
-        {stripCodeFenceFromArtifact(children)}
+        {processedChildren}
       </ReactMarkdown>
     );
   },

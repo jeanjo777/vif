@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" width="120" height="40">
+  <defs>
+    <linearGradient id="vif-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8A5FFF"/>
+      <stop offset="100%" stop-color="#B69EFF"/>
+    </linearGradient>
+  </defs>
+  <text x="0" y="32" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="36" font-weight="800" letter-spacing="-1">
+    <tspan fill="#1a1a1a">V</tspan><tspan fill="url(#vif-grad)">if</tspan>
+  </text>
+</svg>

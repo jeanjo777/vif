@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   GitLabUserResponse,
   GitLabProjectInfo,
   GitLabEvent,
@@ -476,7 +476,7 @@ export class GitLabApiService {
 
     const commitRequest: GitLabCommitRequest = {
       branch: 'main',
-      commit_message: 'Update from Bolt.diy',
+      commit_message: 'Update from Vif',
       actions,
     };
 

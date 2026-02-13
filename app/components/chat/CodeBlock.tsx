@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { bundledLanguages, codeToHtml, isSpecialLang, type BundledLanguage, type SpecialLanguage } from 'shiki';
 import { classNames } from '~/utils/classNames';
 import { createScopedLogger } from '~/utils/logger';
@@ -19,8 +19,10 @@ export const CodeBlock = memo(
   ({ className, code, language = 'plaintext', theme = 'dark-plus', disableCopy = false }: CodeBlockProps) => {
     const [html, setHTML] = useState<string | undefined>(undefined);
     const [copied, setCopied] = useState(false);
+    const debounceTimerRef = useRef<ReturnType<typeof setTimeout>>();
+    const lastCodeRef = useRef<string>('');
 
-    const copyToClipboard = () => {
+    const copyToClipboard = useCallback(() => {
       if (copied) {
         return;
       }
@@ -32,7 +34,7 @@ export const CodeBlock = memo(
       setTimeout(() => {
         setCopied(false);
       }, 2000);
-    };
+    }, [copied, code]);
 
     useEffect(() => {
       let effectiveLanguage = language;
@@ -42,13 +44,28 @@ export const CodeBlock = memo(
         effectiveLanguage = 'plaintext';
       }
 
-      logger.trace(`Language = ${effectiveLanguage}`);
+      // Skip if code hasn't changed
+      if (code === lastCodeRef.current && html !== undefined) {
+        return;
+      }
 
-      const processCode = async () => {
+      lastCodeRef.current = code;
+
+      // Clear any pending debounce
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+
+      // Debounce highlighting during streaming (200ms)
+      debounceTimerRef.current = setTimeout(async () => {
         setHTML(await codeToHtml(code, { lang: effectiveLanguage, theme }));
-      };
+      }, 200);
 
-      processCode();
+      return () => {
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+        }
+      };
     }, [code, language, theme]);
 
     return (
