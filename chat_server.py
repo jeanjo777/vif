@@ -1820,22 +1820,27 @@ def chat():
                 
                 # CHOOSE CLIENT - UNCENSORED MODELS
                 if selected_model in ['hermes4-405b', 'hermes']:
-                    # HERMES 405B - TRY: Hermes 4 > Hermes 3 > Hermes 3 FREE
-                    models = ["nousresearch/hermes-4-405b", "nousresearch/hermes-3-llama-3.1-405b", "nousresearch/hermes-3-llama-3.1-405b:free"]
+                    # Try FREE models first that don't require auth
+                    models = [
+                        "meta-llama/llama-3.1-8b-instruct:free",
+                        "mistralai/mistral-7b-instruct:free",
+                        "nousresearch/hermes-3-llama-3.1-405b:free"
+                    ]
                     last_error = None
                     for m in models:
                         try:
                             response_stream = client_openrouter.chat.completions.create(
                                 model=m, messages=conversation_context, max_tokens=4000, temperature=0.8, stream=True,
-                                extra_headers={"HTTP-Referer": "https://vif-production.up.railway.app"}
+                                extra_headers={"HTTP-Referer": "https://vif.lat", "X-Title": "VIF AI"}
                             )
-                            print(f"UNCENSORED: {m}")
+                            print(f"✅ Using free model: {m}", flush=True)
                             break
                         except Exception as e:
                             last_error = str(e)
+                            print(f"❌ Model {m} failed: {e}", flush=True)
                             continue
                     if not response_stream and last_error:
-                        yield f"data: {json.dumps({'error': f'Hermes 405B: {last_error}'})}\n\n"
+                        yield f"data: {json.dumps({'error': f'All models failed: {last_error}'})}\n\n"
                         return
                 elif selected_model in ['hermes4-70b']:
                     # HERMES 70B FALLBACK
