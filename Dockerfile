@@ -1,100 +1,83 @@
-# ---- build stage ----
-FROM node:22-bookworm-slim AS build
+# Multi-stage Dockerfile for Vif (Remix + Cloudflare Pages)
+
+# Stage 1: Dependencies
+FROM node:18-alpine AS deps
 WORKDIR /app
 
-# CI-friendly env
-ENV HUSKY=0
-ENV CI=true
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@9.14.4 --activate
 
-# Use pnpm
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+# Copy package files
+COPY package.json pnpm-lock.yaml ./
 
-# Ensure git is available for build and runtime scripts
-RUN apt-get update && apt-get install -y --no-install-recommends git \
-  && rm -rf /var/lib/apt/lists/*
+# Install dependencies
+RUN pnpm install --frozen-lockfile
 
-# Accept (optional) build-time public URL for Remix/Vite (Coolify can pass it)
-ARG VITE_PUBLIC_APP_URL
-ENV VITE_PUBLIC_APP_URL=${VITE_PUBLIC_APP_URL}
+# Stage 2: Builder
+FROM node:18-alpine AS builder
+WORKDIR /app
 
-# Install deps efficiently
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm fetch
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@9.14.4 --activate
 
-# Copy source and build
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy source code
 COPY . .
-# install with dev deps (needed to build)
-RUN pnpm install --offline --frozen-lockfile
 
-# Build the Remix app (SSR + client)
-RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm run build
+# Build the application
+RUN pnpm run build
 
-# ---- production dependencies stage ----
-FROM build AS prod-deps
-
-# Keep only production deps for runtime
-RUN pnpm prune --prod --ignore-scripts
-
-
-# ---- development stage ----
-FROM build AS development
-
-# Non-sensitive development arguments
-ARG VITE_LOG_LEVEL=debug
-ARG DEFAULT_NUM_CTX
-
-# Set non-sensitive environment variables for development
-ENV VITE_LOG_LEVEL=${VITE_LOG_LEVEL} \
-    DEFAULT_NUM_CTX=${DEFAULT_NUM_CTX} \
-    RUNNING_IN_DOCKER=true
-
-RUN mkdir -p /app/run
-CMD ["pnpm", "run", "dev", "--host"]
-
-
-# ---- production stage (last = default for Railway) ----
-FROM prod-deps AS vif-ai-production
+# Stage 3: Production
+FROM node:18-alpine AS vif-ai-production
 WORKDIR /app
 
-ENV NODE_ENV=production
-ENV PORT=5173
-ENV HOST=0.0.0.0
+# Install pnpm and required tools
+RUN corepack enable && corepack prepare pnpm@9.14.4 --activate && \
+    apk add --no-cache bash
 
-# Non-sensitive build arguments
-ARG VITE_LOG_LEVEL=debug
-ARG DEFAULT_NUM_CTX
+# Copy built application
+COPY --from=builder /app/build ./build
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/bindings.sh ./bindings.sh
+COPY --from=builder /app/worker-configuration.d.ts ./worker-configuration.d.ts
 
-# Set non-sensitive environment variables
-ENV WRANGLER_SEND_METRICS=false \
-    VITE_LOG_LEVEL=${VITE_LOG_LEVEL} \
-    DEFAULT_NUM_CTX=${DEFAULT_NUM_CTX} \
-    RUNNING_IN_DOCKER=true \
-    NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+# Make bindings.sh executable
+RUN chmod +x ./bindings.sh
 
-# Install curl for healthchecks and CA certificates for TLS (needed by workerd)
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
-  && update-ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
-
-# Copy built files and scripts
-COPY --from=prod-deps /app/build /app/build
-COPY --from=prod-deps /app/node_modules /app/node_modules
-COPY --from=prod-deps /app/package.json /app/package.json
-COPY --from=prod-deps /app/bindings.sh /app/bindings.sh
-COPY --from=prod-deps /app/worker-configuration.d.ts /app/worker-configuration.d.ts
-
-# Pre-configure wrangler to disable metrics
-RUN mkdir -p /root/.config/.wrangler && \
-    echo '{"enabled":false}' > /root/.config/.wrangler/metrics.json
-
-# Fix line endings and make bindings script executable
-RUN sed -i 's/\r$//' /app/bindings.sh && chmod +x /app/bindings.sh
-
+# Expose port
 EXPOSE 5173
 
-# Healthcheck for deployment platforms
-HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 \
-  CMD curl -fsS http://localhost:5173/ || exit 1
+# Set NODE_ENV
+ENV NODE_ENV=production
 
-# Start using dockerstart script with Wrangler
+# Start the application using the dockerstart script
 CMD ["pnpm", "run", "dockerstart"]
+
+# Stage 4: Development (for local development)
+FROM node:18-alpine AS development
+WORKDIR /app
+
+# Install pnpm and bash
+RUN corepack enable && corepack prepare pnpm@9.14.4 --activate && \
+    apk add --no-cache bash git
+
+# Copy package files
+COPY package.json pnpm-lock.yaml ./
+
+# Install all dependencies (including dev)
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY . .
+
+# Make bindings.sh executable
+RUN chmod +x ./bindings.sh
+
+# Expose port
+EXPOSE 5173
+
+# Build and start
+CMD ["sh", "-c", "pnpm run build && pnpm run dockerstart"]
