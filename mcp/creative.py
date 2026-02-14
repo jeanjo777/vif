@@ -1,6 +1,6 @@
 """
 MCP Creative - Image generation, audio synthesis, text-to-speech
-Uses HuggingFace Inference API for image generation (free)
+Uses Higgsfield AI API for image generation
 """
 from .base import MCPServer, MCPTool
 from typing import Dict, Any
@@ -21,7 +21,9 @@ class CreativeMCP(MCPServer):
             description="Creative tools: Image generation, editing, text-to-speech, speech-to-text"
         )
         self.openrouter_key = os.getenv('OPENROUTER_API_KEY')
-        self.hf_token = os.getenv('HF_TOKEN') or os.getenv('HuggingFace_API_KEY') or os.getenv('HUGGINGFACE_TOKEN')
+        self.higgsfield_api_key = os.getenv('HIGGSFIELD_API_KEY')
+        self.higgsfield_secret = os.getenv('HIGGSFIELD_SECRET')
+        self.higgsfield_base_url = "https://platform.higgsfield.ai"
         self.workspace = Path("/tmp/vif_creative")
         self.workspace.mkdir(parents=True, exist_ok=True)
         self._init_tools()
@@ -32,7 +34,7 @@ class CreativeMCP(MCPServer):
         # Tool 1: Generate image
         self.register_tool(MCPTool(
             name="generate_image",
-            description="Generate image from text prompt using Stable Diffusion (HuggingFace)",
+            description="Generate image from text prompt using Higgsfield AI (Soul model)",
             parameters={
                 "type": "object",
                 "properties": {
@@ -40,21 +42,16 @@ class CreativeMCP(MCPServer):
                         "type": "string",
                         "description": "Text description of image to generate"
                     },
-                    "negative_prompt": {
+                    "quality": {
                         "type": "string",
-                        "description": "What to avoid in the image (e.g. 'blurry, low quality')",
-                        "default": ""
-                    },
-                    "model": {
-                        "type": "string",
-                        "description": "Model: flux, sdxl, sd3",
-                        "enum": ["flux", "sdxl", "sd3", "auto"],
-                        "default": "flux"
+                        "description": "Image quality: 720p or 1080p",
+                        "enum": ["720p", "1080p"],
+                        "default": "720p"
                     },
                     "size": {
                         "type": "string",
-                        "description": "Image size",
-                        "enum": ["512x512", "768x768", "1024x1024"],
+                        "description": "Image dimensions",
+                        "enum": ["1024x1024", "1152x2048", "2048x1152"],
                         "default": "1024x1024"
                     }
                 },
@@ -94,10 +91,10 @@ class CreativeMCP(MCPServer):
             handler=self._edit_image
         ))
 
-        # Tool 3: Image-to-Image
+        # Tool 3: Image-to-Image (not available with Higgsfield)
         self.register_tool(MCPTool(
             name="image_to_image",
-            description="Transform an existing image using a text prompt (style transfer, modifications)",
+            description="Transform an existing image using a text prompt (currently unavailable)",
             parameters={
                 "type": "object",
                 "properties": {
@@ -108,20 +105,6 @@ class CreativeMCP(MCPServer):
                     "image_url": {
                         "type": "string",
                         "description": "URL of the source image"
-                    },
-                    "image_path": {
-                        "type": "string",
-                        "description": "Local path to the source image"
-                    },
-                    "strength": {
-                        "type": "number",
-                        "description": "How much to transform (0.0 = keep original, 1.0 = full transform)",
-                        "default": 0.7
-                    },
-                    "negative_prompt": {
-                        "type": "string",
-                        "description": "What to avoid",
-                        "default": ""
                     }
                 },
                 "required": ["prompt"]
@@ -205,190 +188,130 @@ class CreativeMCP(MCPServer):
             handler=self._speech_to_text
         ))
 
-    def _generate_image(self, prompt: str, negative_prompt: str = "",
-                       model: str = "flux", size: str = "1024x1024") -> Dict[str, Any]:
-        """Generate image using HuggingFace Inference API"""
+    def _generate_image(self, prompt: str, quality: str = "720p",
+                       size: str = "1024x1024") -> Dict[str, Any]:
+        """Generate image using Higgsfield AI (Soul model)"""
         try:
-            if not self.hf_token:
-                return {"error": "HF_TOKEN not configured. Image generation requires a HuggingFace API token."}
+            if not self.higgsfield_api_key or not self.higgsfield_secret:
+                return {"error": "HIGGSFIELD_API_KEY/HIGGSFIELD_SECRET not configured."}
 
-            # Model mapping
-            hf_models = {
-                "flux": "black-forest-labs/FLUX.1-schnell",
-                "sdxl": "stabilityai/stable-diffusion-xl-base-1.0",
-                "sd3": "stabilityai/stable-diffusion-3-medium-diffusers",
-                "auto": "black-forest-labs/FLUX.1-schnell",
-            }
-
-            model_id = hf_models.get(model, hf_models["flux"])
-
-            # Parse size
-            try:
-                width, height = map(int, size.split('x'))
-            except ValueError:
-                width, height = 1024, 1024
-
-            # Call HuggingFace Inference API
-            api_url = f"https://api-inference.huggingface.co/models/{model_id}"
             headers = {
-                "Authorization": f"Bearer {self.hf_token}",
-                "Content-Type": "application/json"
+                "hf-api-key": self.higgsfield_api_key,
+                "hf-secret": self.higgsfield_secret,
+                "Content-Type": "application/json",
+                "Accept": "application/json"
             }
 
+            # Submit image generation job
             payload = {
-                "inputs": prompt,
-                "parameters": {
-                    "width": width,
-                    "height": height,
+                "params": {
+                    "prompt": prompt,
+                    "width_and_height": size,
+                    "enhance_prompt": True,
+                    "quality": quality,
+                    "batch_size": 1
                 }
             }
 
-            if negative_prompt:
-                payload["parameters"]["negative_prompt"] = negative_prompt
-
-            # First attempt
-            response = requests.post(api_url, headers=headers, json=payload, timeout=120)
-
-            # Handle model loading (503 = model is loading)
-            if response.status_code == 503:
-                estimated_time = response.json().get("estimated_time", 30)
-                wait_time = min(estimated_time, 60)
-                time.sleep(wait_time)
-                response = requests.post(api_url, headers=headers, json=payload, timeout=120)
+            api_url = f"{self.higgsfield_base_url}/v1/text2image/soul"
+            response = requests.post(api_url, headers=headers, json=payload, timeout=30)
 
             if response.status_code != 200:
                 error_msg = response.text[:300]
-                return {"error": f"HuggingFace API error ({response.status_code}): {error_msg}"}
+                return {"error": f"Higgsfield API error ({response.status_code}): {error_msg}"}
 
-            # Response is raw image bytes
-            image_data = response.content
+            job_data = response.json()
+            job_set_id = job_data.get("id")
+            if not job_set_id:
+                return {"error": f"No job ID in response: {str(job_data)[:200]}"}
 
-            # Verify it's actually an image
-            content_type = response.headers.get('content-type', '')
-            if 'image' not in content_type and len(image_data) < 1000:
-                return {"error": f"Unexpected response: {image_data[:200].decode('utf-8', errors='ignore')}"}
+            # Poll for results (max 90s to stay under gunicorn 120s timeout)
+            poll_url = f"{self.higgsfield_base_url}/v1/job-sets/{job_set_id}"
+            max_polls = 30
+            poll_interval = 3
 
-            # Compress to JPEG for faster transfer (60-80% smaller than PNG)
-            try:
-                from PIL import Image
-                img = Image.open(io.BytesIO(image_data))
-                if img.mode == 'RGBA':
-                    img = img.convert('RGB')
-                output = io.BytesIO()
-                img.save(output, format='JPEG', quality=85, optimize=True)
-                image_data = output.getvalue()
-                ext = '.jpg'
-            except ImportError:
-                ext = '.png'
+            for _ in range(max_polls):
+                time.sleep(poll_interval)
+                poll_response = requests.get(poll_url, headers=headers, timeout=15)
+                if poll_response.status_code != 200:
+                    continue
 
-            # Save image
-            save_path = str(self.workspace / f"generated_{abs(hash(prompt))}{ext}")
-            with open(save_path, 'wb') as f:
-                f.write(image_data)
+                poll_data = poll_response.json()
+                jobs = poll_data.get("jobs", [])
 
-            # Encode to base64
-            image_b64 = base64.b64encode(image_data).decode('utf-8')
+                if not jobs:
+                    continue
 
-            return {
-                "success": True,
-                "prompt": prompt,
-                "model": model_id,
-                "size": size,
-                "local_path": save_path,
-                "image_base64": image_b64,
-                "file_size_kb": round(len(image_data) / 1024, 1)
-            }
+                job = jobs[0]
+                status = job.get("status", "")
+
+                if status == "completed":
+                    results = job.get("results", {})
+                    # Get preview URL (faster) or full quality
+                    image_url = None
+                    if results.get("min", {}).get("url"):
+                        image_url = results["min"]["url"]
+                    elif results.get("raw", {}).get("url"):
+                        image_url = results["raw"]["url"]
+
+                    if not image_url:
+                        return {"error": "Job completed but no image URL in results"}
+
+                    # Download the image
+                    img_response = requests.get(image_url, timeout=30)
+                    if img_response.status_code != 200:
+                        return {"error": f"Failed to download image: {img_response.status_code}"}
+
+                    image_data = img_response.content
+
+                    # Compress to JPEG for faster transfer
+                    ext = '.jpg'
+                    try:
+                        from PIL import Image
+                        img = Image.open(io.BytesIO(image_data))
+                        if img.mode == 'RGBA':
+                            img = img.convert('RGB')
+                        output = io.BytesIO()
+                        img.save(output, format='JPEG', quality=85, optimize=True)
+                        image_data = output.getvalue()
+                    except ImportError:
+                        ext = '.png'
+
+                    # Save image
+                    save_path = str(self.workspace / f"generated_{abs(hash(prompt))}{ext}")
+                    with open(save_path, 'wb') as f:
+                        f.write(image_data)
+
+                    image_b64 = base64.b64encode(image_data).decode('utf-8')
+
+                    return {
+                        "success": True,
+                        "prompt": prompt,
+                        "model": "higgsfield-soul",
+                        "size": size,
+                        "local_path": save_path,
+                        "image_base64": image_b64,
+                        "file_size_kb": round(len(image_data) / 1024, 1)
+                    }
+
+                elif status == "failed":
+                    return {"error": f"Image generation failed: {job.get('error', 'unknown error')}"}
+                elif status == "nsfw":
+                    return {"error": "Image generation blocked: content flagged as NSFW"}
+
+            return {"error": "Image generation timed out after 90 seconds"}
 
         except requests.Timeout:
-            return {"error": "Image generation timed out. The model may be loading, try again."}
+            return {"error": "Image generation request timed out"}
         except Exception as e:
             return {"error": str(e)}
 
-    def _image_to_image(self, prompt: str, image_url: str = None, image_path: str = None,
-                       strength: float = 0.7, negative_prompt: str = "") -> Dict[str, Any]:
-        """Transform image using HuggingFace img2img API"""
-        try:
-            if not self.hf_token:
-                return {"error": "HF_TOKEN not configured. Image-to-image requires a HuggingFace API token."}
-
-            # Load source image
-            if image_url:
-                img_response = requests.get(image_url, timeout=30)
-                img_response.raise_for_status()
-                image_data = img_response.content
-            elif image_path:
-                with open(image_path, 'rb') as f:
-                    image_data = f.read()
-            else:
-                return {"error": "No source image provided (image_url or image_path required)"}
-
-            # Use SDXL img2img via HuggingFace
-            model_id = "stabilityai/stable-diffusion-xl-refiner-1.0"
-            api_url = f"https://api-inference.huggingface.co/models/{model_id}"
-            headers = {"Authorization": f"Bearer {self.hf_token}"}
-
-            # Encode image to base64
-            img_b64 = base64.b64encode(image_data).decode('utf-8')
-
-            payload = {
-                "inputs": {
-                    "image": img_b64,
-                    "prompt": prompt,
-                },
-                "parameters": {
-                    "strength": strength,
-                }
-            }
-            if negative_prompt:
-                payload["parameters"]["negative_prompt"] = negative_prompt
-
-            response = requests.post(api_url, headers=headers, json=payload, timeout=120)
-
-            # Handle model loading
-            if response.status_code == 503:
-                estimated_time = response.json().get("estimated_time", 30)
-                time.sleep(min(estimated_time, 60))
-                response = requests.post(api_url, headers=headers, json=payload, timeout=120)
-
-            if response.status_code != 200:
-                return {"error": f"HuggingFace API error ({response.status_code}): {response.text[:300]}"}
-
-            result_data = response.content
-            content_type = response.headers.get('content-type', '')
-            if 'image' not in content_type and len(result_data) < 1000:
-                return {"error": f"Unexpected response: {result_data[:200].decode('utf-8', errors='ignore')}"}
-
-            # Compress to JPEG for faster transfer
-            try:
-                from PIL import Image
-                img = Image.open(io.BytesIO(result_data))
-                if img.mode == 'RGBA':
-                    img = img.convert('RGB')
-                output = io.BytesIO()
-                img.save(output, format='JPEG', quality=85, optimize=True)
-                result_data = output.getvalue()
-                ext = '.jpg'
-            except ImportError:
-                ext = '.png'
-
-            save_path = str(self.workspace / f"img2img_{abs(hash(prompt))}{ext}")
-            with open(save_path, 'wb') as f:
-                f.write(result_data)
-
-            return {
-                "success": True,
-                "prompt": prompt,
-                "strength": strength,
-                "model": model_id,
-                "local_path": save_path,
-                "image_base64": base64.b64encode(result_data).decode('utf-8'),
-                "file_size_kb": round(len(result_data) / 1024, 1)
-            }
-
-        except requests.Timeout:
-            return {"error": "Image transformation timed out. Try again."}
-        except Exception as e:
-            return {"error": str(e)}
+    def _image_to_image(self, prompt: str, image_url: str = None, **kwargs) -> Dict[str, Any]:
+        """Image-to-image is not available with current API"""
+        return {
+            "error": "Image-to-image transformation is not available. Use generate_image instead.",
+            "alternative": "Use generate_image with a detailed text prompt describing what you want."
+        }
 
     def _edit_image(self, image_url: str = None, image_path: str = None,
                    operation: str = "resize",
@@ -494,30 +417,10 @@ class CreativeMCP(MCPServer):
     def _text_to_speech(self, text: str, voice: str = "alloy",
                        model: str = "tts-1", speed: float = 1.0,
                        format: str = "mp3") -> Dict[str, Any]:
-        """Convert text to speech using HuggingFace or OpenRouter"""
+        """Convert text to speech using OpenRouter"""
         try:
-            # Try HuggingFace first (free)
-            if self.hf_token:
-                api_url = "https://api-inference.huggingface.co/models/facebook/mms-tts-fra"
-                headers = {"Authorization": f"Bearer {self.hf_token}"}
-                response = requests.post(api_url, headers=headers,
-                                        json={"inputs": text}, timeout=60)
-                if response.status_code == 200 and 'audio' in response.headers.get('content-type', ''):
-                    audio_data = response.content
-                    save_path = str(self.workspace / f"speech_{abs(hash(text))}.wav")
-                    with open(save_path, 'wb') as f:
-                        f.write(audio_data)
-                    return {
-                        "text": text[:100] + "..." if len(text) > 100 else text,
-                        "model": "facebook/mms-tts",
-                        "save_path": save_path,
-                        "audio_base64": base64.b64encode(audio_data).decode('utf-8'),
-                        "success": True
-                    }
-
-            # Fallback to OpenRouter
             if not self.openrouter_key:
-                return {"error": "No API key configured for text-to-speech (HF_TOKEN or OPENROUTER_API_KEY needed)"}
+                return {"error": "OPENROUTER_API_KEY not configured for text-to-speech"}
 
             url = "https://openrouter.ai/api/v1/audio/speech"
             headers = {
@@ -557,7 +460,7 @@ class CreativeMCP(MCPServer):
     def _speech_to_text(self, audio_url: str = None, audio_path: str = None,
                        language: str = None, model: str = "whisper-1",
                        response_format: str = "text") -> Dict[str, Any]:
-        """Transcribe audio to text using HuggingFace Whisper or OpenRouter"""
+        """Transcribe audio to text using OpenRouter"""
         try:
             # Load audio
             if audio_url:
@@ -570,23 +473,8 @@ class CreativeMCP(MCPServer):
             else:
                 return {"error": "No audio provided"}
 
-            # Try HuggingFace Whisper (free)
-            if self.hf_token:
-                api_url = "https://api-inference.huggingface.co/models/openai/whisper-large-v3"
-                headers = {"Authorization": f"Bearer {self.hf_token}"}
-                response = requests.post(api_url, headers=headers, data=audio_data, timeout=120)
-                if response.status_code == 200:
-                    result = response.json()
-                    return {
-                        "model": "whisper-large-v3",
-                        "language": language,
-                        "transcription": result.get("text", str(result)),
-                        "success": True
-                    }
-
-            # Fallback to OpenRouter
             if not self.openrouter_key:
-                return {"error": "No API key configured for speech-to-text (HF_TOKEN or OPENROUTER_API_KEY needed)"}
+                return {"error": "OPENROUTER_API_KEY not configured for speech-to-text"}
 
             url = "https://openrouter.ai/api/v1/audio/transcriptions"
             headers = {
