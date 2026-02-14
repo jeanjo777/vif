@@ -7,6 +7,7 @@ from typing import Dict, Any
 import requests
 import base64
 import os
+import io
 import time
 from pathlib import Path
 
@@ -267,8 +268,21 @@ class CreativeMCP(MCPServer):
             if 'image' not in content_type and len(image_data) < 1000:
                 return {"error": f"Unexpected response: {image_data[:200].decode('utf-8', errors='ignore')}"}
 
+            # Compress to JPEG for faster transfer (60-80% smaller than PNG)
+            try:
+                from PIL import Image
+                img = Image.open(io.BytesIO(image_data))
+                if img.mode == 'RGBA':
+                    img = img.convert('RGB')
+                output = io.BytesIO()
+                img.save(output, format='JPEG', quality=85, optimize=True)
+                image_data = output.getvalue()
+                ext = '.jpg'
+            except ImportError:
+                ext = '.png'
+
             # Save image
-            save_path = str(self.workspace / f"generated_{abs(hash(prompt))}.png")
+            save_path = str(self.workspace / f"generated_{abs(hash(prompt))}{ext}")
             with open(save_path, 'wb') as f:
                 f.write(image_data)
 
@@ -344,7 +358,20 @@ class CreativeMCP(MCPServer):
             if 'image' not in content_type and len(result_data) < 1000:
                 return {"error": f"Unexpected response: {result_data[:200].decode('utf-8', errors='ignore')}"}
 
-            save_path = str(self.workspace / f"img2img_{abs(hash(prompt))}.png")
+            # Compress to JPEG for faster transfer
+            try:
+                from PIL import Image
+                img = Image.open(io.BytesIO(result_data))
+                if img.mode == 'RGBA':
+                    img = img.convert('RGB')
+                output = io.BytesIO()
+                img.save(output, format='JPEG', quality=85, optimize=True)
+                result_data = output.getvalue()
+                ext = '.jpg'
+            except ImportError:
+                ext = '.png'
+
+            save_path = str(self.workspace / f"img2img_{abs(hash(prompt))}{ext}")
             with open(save_path, 'wb') as f:
                 f.write(result_data)
 

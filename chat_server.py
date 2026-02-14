@@ -1234,7 +1234,11 @@ def serve_mcp_image(filename):
     file_path = os.path.join(creative_dir, safe_name)
     if not os.path.isfile(file_path):
         return "Image not found", 404
-    return send_from_directory(creative_dir, safe_name, mimetype='image/png')
+    ext = os.path.splitext(safe_name)[1].lower()
+    mime = 'image/jpeg' if ext in ('.jpg', '.jpeg') else 'image/png'
+    resp = make_response(send_from_directory(creative_dir, safe_name, mimetype=mime))
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
 
 
 @app.route('/api/mcp/audio/<filename>')
@@ -1904,7 +1908,24 @@ def chat():
                 # Execute MCP tools first
                 if has_mcp_call and mcp_manager:
                     try:
+                        # Detect tool type and stream loading indicator
+                        if '"generate_image"' in full_response_for_execution or '"image_to_image"' in full_response_for_execution:
+                            tool_hint = '<!--MCP_LOADING--><div class="mcp-loading">Generating image...</div><!--/MCP_LOADING-->'
+                        elif '"text_to_speech"' in full_response_for_execution:
+                            tool_hint = '<!--MCP_LOADING--><div class="mcp-loading">Generating audio...</div><!--/MCP_LOADING-->'
+                        elif '"web_search"' in full_response_for_execution or '"navigate"' in full_response_for_execution:
+                            tool_hint = '<!--MCP_LOADING--><div class="mcp-loading">Searching...</div><!--/MCP_LOADING-->'
+                        elif '"scan_ports"' in full_response_for_execution or '"check_ssl"' in full_response_for_execution:
+                            tool_hint = '<!--MCP_LOADING--><div class="mcp-loading">Scanning...</div><!--/MCP_LOADING-->'
+                        elif '"execute_python"' in full_response_for_execution:
+                            tool_hint = '<!--MCP_LOADING--><div class="mcp-loading">Executing code...</div><!--/MCP_LOADING-->'
+                        else:
+                            tool_hint = '<!--MCP_LOADING--><div class="mcp-loading">Processing...</div><!--/MCP_LOADING-->'
+                        yield f"data: {json.dumps({'content': tool_hint})}\n\n"
+
                         mcp_result = mcp_manager.parse_and_execute(full_response_for_execution)
+                        # Clear loading indicator
+                        yield f"data: {json.dumps({'clear_loading': True})}\n\n"
                         if mcp_result:
                             result_data = mcp_result.get('result', {})
                             mcp_server = mcp_result.get('mcp_server', '')
