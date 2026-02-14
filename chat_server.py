@@ -529,7 +529,17 @@ You have access to a real web browser. To browse:
         if IS_RAILWAY or not WEB_AGENT_AVAILABLE:
             mcp_instructions += "\n\n⚠️ For web browsing, use the MCP web_browser server tools (navigate, extract_links, search_page, get_metadata)."
 
-    return base_prompt + web_instructions + mcp_instructions
+    full_prompt = base_prompt + web_instructions + mcp_instructions
+
+    # Final reinforcement (recency bias - model pays most attention to end of prompt)
+    full_prompt += """
+
+FINAL REMINDER - CRITICAL:
+When the user asks to generate/draw/create/make an image or picture, you MUST respond with ONLY this JSON (no other text):
+{"mcp_call":true,"server":"creative","tool":"generate_image","parameters":{"prompt":"ENHANCED DESCRIPTION HERE"}}
+NEVER say "I cannot generate images" - you HAVE this capability via MCP tools. USE IT."""
+
+    return full_prompt
 
 # --- SERVICES ---
 
@@ -1799,6 +1809,23 @@ def chat():
         # Use specialized system prompt based on selected model
         model_prompt = get_system_prompt(selected_model)
         messages = [{"role": "system", "content": model_prompt}] + final_conversation
+
+        # Detect image generation requests and inject tool reminder
+        import re
+        last_user_msg = user_message.lower()
+        image_trigger = bool(re.search(
+            r'(gen[eè]re|cre[ée]|dessine|draw|generate|create|make|fais|produis|montre)'
+            r'.*(image|photo|picture|illustration|dessin|portrait|logo|icon[eê]?)',
+            last_user_msg, re.IGNORECASE
+        ) or re.search(
+            r'(image|photo|dessin|illustration).*(de|of|d\'un|d\'une)',
+            last_user_msg, re.IGNORECASE
+        ))
+        if image_trigger:
+            messages.append({
+                "role": "system",
+                "content": 'INSTRUCTION: The user wants an image generated. You MUST respond with ONLY this JSON (replace PROMPT with enhanced description):\n{"mcp_call":true,"server":"creative","tool":"generate_image","parameters":{"prompt":"PROMPT"}}\nDo NOT say you cannot generate images. Do NOT suggest alternatives. Output ONLY the JSON.'
+            })
 
         # GENERATOR
         # GENERATOR - MULTI-TURN ReAct LOOP
