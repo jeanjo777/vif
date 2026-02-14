@@ -2063,6 +2063,19 @@
                                     continue;
                                 }
 
+                                // Replace full content (identity fix from server)
+                                if (parsed.replace_content) {
+                                    fullText = parsed.replace_content;
+                                    let cleanText = fullText.replace(/\[(BROWSE|CLICK|TYPE|PRESS|READ|SCREENSHOT).*?\]/g, "");
+                                    cleanText = cleanText.replace(/\{"mcp_call"\s*:\s*true[^}]*\}/g, "");
+                                    contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(cleanText), {
+                                        ADD_ATTR: ['target', 'onclick', 'style', 'controls', 'src', 'class'],
+                                        ADD_TAGS: ['iframe', 'audio']
+                                    });
+                                    addCodeActions(contentDiv);
+                                    continue;
+                                }
+
                                 // Clear loading indicator when MCP finishes
                                 if (parsed.clear_loading) {
                                     fullText = fullText.replace(/<!--MCP_LOADING-->.*?<!--\/MCP_LOADING-->/gs, '');

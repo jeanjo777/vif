@@ -1869,6 +1869,23 @@ def _generate_session_title(user_message: str, assistant_response: str = '') -> 
         msg = msg[:40].rsplit(' ', 1)[0] + '...'
     return msg or 'New Signal'
 
+def _sanitize_identity(text: str) -> str:
+    """Post-process LLM output to fix identity leaks (Mistral, OpenAI, etc.)"""
+    if not text:
+        return text
+    import re as _re
+    # Replace "created/made/developed by Mistral AI" -> "created by Jean-Jaures"
+    text = _re.sub(r'(cre[ée]{1,2}|fait|d[eé]velopp[eé]|con[cç]u|train[eé]|made|created|developed|built|designed|trained)\s+(par|by)\s+Mistral\s*AI?', r'\1 \2 Jean-Jaures', text, flags=_re.IGNORECASE)
+    # Replace "I am Mistral" / "je suis Mistral" / "I'm a Mistral model"
+    text = _re.sub(r"(je suis|I am|I'm)\s+(un\s+(mod[eè]le|assistant|IA)\s+)?(de\s+|from\s+|by\s+)?Mistral(\s*AI)?", r"\1 Vif, cree par Jean-Jaures", text, flags=_re.IGNORECASE)
+    # Replace standalone "Mistral AI" when talking about identity
+    text = _re.sub(r'Mistral\s*AI', 'Jean-Jaures', text, flags=_re.IGNORECASE)
+    # Replace "Mistral" alone (but only in identity context, not general mentions)
+    text = _re.sub(r"(par|by|from|de)\s+Mistral\b", r"\1 Jean-Jaures", text, flags=_re.IGNORECASE)
+    # Also handle OpenAI, Meta, Anthropic identity leaks
+    text = _re.sub(r'(cre[ée]{1,2}|fait|made|created|developed|built|trained)\s+(par|by)\s+(OpenAI|Meta|Anthropic|Google|DeepMind)', r'\1 \2 Jean-Jaures', text, flags=_re.IGNORECASE)
+    return text
+
 def _sanitize_error_for_user(error_msg: str) -> str:
     """Convert technical MCP/API errors to user-friendly messages"""
     if not error_msg:
@@ -2225,7 +2242,7 @@ def chat():
                                         is_action_turn = True
                                     else:
                                         streaming_started = True
-                                        yield f"data: {json.dumps({'content': initial_buffer})}\n\n"
+                                        yield f"data: {json.dumps({'content': _sanitize_identity(initial_buffer)})}\n\n"
                             elif not is_action_turn:
                                 # Check if MCP JSON appeared mid-stream - stop streaming immediately
                                 if mcp_manager and MCP_JSON_PATTERN.search(current_turn_text):
@@ -2244,10 +2261,20 @@ def chat():
                         full_response_for_execution = ""
                         continue
 
+                # Apply identity sanitization to the full turn text
+                sanitized_turn = _sanitize_identity(current_turn_text)
+                identity_was_fixed = (sanitized_turn != current_turn_text)
+                if identity_was_fixed:
+                    current_turn_text = sanitized_turn
+                    full_response_for_execution = _sanitize_identity(full_response_for_execution)
+
                 if not streaming_started and not is_action_turn:
                     if current_turn_text:
                         yield f"data: {json.dumps({'content': current_turn_text})}\n\n"
                     streaming_started = True
+                elif identity_was_fixed and streaming_started:
+                    # Text was already streamed with wrong identity - send full replacement
+                    yield f"data: {json.dumps({'replace_content': current_turn_text})}\n\n"
 
                 if not current_turn_text.strip():
                     error_detail = f" ({stream_error})" if stream_error else ""
