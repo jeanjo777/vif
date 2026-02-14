@@ -2099,12 +2099,14 @@ def chat():
                         conn.commit()
                         session['credits'] = new_credits
 
-                # 1. VERIFY OWNERSHIP & EXISTENCE
+                # 1. VERIFY OWNERSHIP & EXISTENCE (auto-create if missing)
                 sess = conn.execute('SELECT username FROM sessions WHERE id = %s', (session_id,)).fetchone()
                 if not sess:
-                    return jsonify({'error': 'Session not found'}), 404
-
-                if sess['username'] != username:
+                    # Auto-create session on first message (lazy creation)
+                    conn.execute('INSERT INTO sessions (id, title, created_at, username) VALUES (%s, %s, %s, %s)',
+                                 (session_id, 'New Signal', datetime.datetime.now(), username))
+                    conn.commit()
+                elif sess['username'] != username:
                     return jsonify({'error': 'Unauthorized'}), 403
 
                 # AUTO-DETECT WEB SEARCH INTENT
