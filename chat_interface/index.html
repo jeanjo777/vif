@@ -1664,7 +1664,11 @@
                     if (m.role === 'user' || m.role === 'assistant') {
                         addMessage(content, m.role === 'user', m.id);
                     } else if (m.role === 'system' && content.includes("uploaded")) {
-                        addMessage(content, false, m.id);
+                        // Extract filename and type, show compact notification (not full content)
+                        const uploadMatch = content.match(/User uploaded '([^']+)'\s*\[([^\]]+)\]/);
+                        if (uploadMatch) {
+                            addMessage({type: 'user_doc', name: uploadMatch[1], docType: uploadMatch[2]}, true, m.id);
+                        }
                     }
                 });
                 loadSessionsList();
@@ -1761,6 +1765,21 @@
                         img.onerror = () => { img.style.display = 'none'; label.textContent += ' (image unavailable)'; };
                         contentDiv.appendChild(img);
                     }
+                // Handle document uploads (user_doc object)
+                } else if (typeof text === 'object' && text !== null && text.type === 'user_doc') {
+                    const docIcon = {
+                        'PDF Document': 'fa-file-pdf', 'Word Document': 'fa-file-word',
+                        'Data Spreadsheet': 'fa-file-excel', 'ZIP Archive': 'fa-file-archive',
+                        'Source Code / Text': 'fa-file-code'
+                    }[text.docType] || 'fa-file-alt';
+                    const card = document.createElement('div');
+                    card.style.cssText = 'display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--bg-element); border:1px solid var(--border-light); border-radius:6px; font-family:var(--font-mono); max-width:400px;';
+                    card.innerHTML = `<i class="fas ${docIcon}" style="font-size:1.4rem; color:var(--text-accent); flex-shrink:0;"></i>
+                        <div style="overflow:hidden;">
+                            <div style="font-size:0.8rem; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${text.name}">${text.name}</div>
+                            <div style="font-size:0.7rem; color:var(--text-muted);">${text.docType}</div>
+                        </div>`;
+                    contentDiv.appendChild(card);
                 } else {
                     contentDiv.textContent = text;
                 }
@@ -2180,17 +2199,21 @@
                 const data = await res.json();
                 if (data.success) {
                     showFileStatus('done', file.name);
-                    // For images: add message directly without full reload
+                    // Add message directly without full reload
                     if (data.image_url) {
                         addMessage({
                             type: 'user_image',
                             text: `Image: ${file.name}`,
                             image_url: data.image_url
                         }, true, null);
-                        scrollToBottom();
                     } else {
-                        loadSession(currentSessionId);
+                        addMessage({
+                            type: 'user_doc',
+                            name: file.name,
+                            docType: data.analysis || data.type || 'Document'
+                        }, true, null);
                     }
+                    scrollToBottom();
                     setTimeout(() => clearFileStatus(), 2000);
                 } else {
                     showFileStatus('error', data.error || 'Upload failed');
