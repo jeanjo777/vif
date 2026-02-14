@@ -693,6 +693,303 @@
                 opacity: 1;
             }
         }
+
+        /* --- HAMBURGER MENU BUTTON (mobile only) --- */
+        .hamburger-btn {
+            display: none;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.3rem;
+            cursor: pointer;
+            padding: 8px;
+            min-width: 44px;
+            min-height: 44px;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s;
+        }
+        .hamburger-btn:hover {
+            color: var(--text-main);
+        }
+
+        /* --- SIDEBAR BACKDROP (mobile overlay) --- */
+        .sidebar-backdrop {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 999;
+            -webkit-backdrop-filter: blur(2px);
+            backdrop-filter: blur(2px);
+        }
+        .sidebar-backdrop.active {
+            display: block;
+        }
+
+        /* =============================================
+           RESPONSIVE BREAKPOINTS
+           ============================================= */
+
+        /* --- TABLET & SMALL DESKTOP (max-width: 768px) --- */
+        @media (max-width: 768px) {
+            .hamburger-btn {
+                display: flex;
+            }
+
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: -280px;
+                width: 280px;
+                height: 100vh;
+                z-index: 1000;
+                transition: left 0.3s ease;
+                box-shadow: none;
+            }
+            .sidebar.open {
+                left: 0;
+                box-shadow: 4px 0 20px rgba(0,0,0,0.5);
+            }
+
+            .header {
+                padding: 0 16px;
+            }
+
+            .header-title {
+                font-size: 1rem;
+            }
+
+            .chat-area {
+                padding: 20px 0;
+                gap: 24px;
+            }
+
+            .message {
+                padding: 0 16px;
+                gap: 12px;
+            }
+
+            .input-wrapper {
+                padding: 12px 16px;
+            }
+
+            .welcome h1 {
+                font-size: 2rem;
+            }
+
+            .welcome p {
+                font-size: 0.95rem;
+                padding: 0 16px;
+            }
+
+            .cards {
+                grid-template-columns: 1fr;
+                padding: 0 16px;
+                max-width: 100%;
+            }
+
+            /* Touch targets - minimum 44px */
+            .btn-send {
+                width: 44px;
+                height: 44px;
+            }
+
+            .btn-icon {
+                min-width: 44px;
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .message-actions button {
+                width: 40px;
+                height: 40px;
+            }
+
+            .session-actions button {
+                min-width: 36px;
+                min-height: 36px;
+                font-size: 0.9rem;
+            }
+
+            /* Switch toggle - bigger for touch */
+            .switch {
+                width: 44px;
+                height: 24px;
+            }
+            .slider:before {
+                height: 18px;
+                width: 18px;
+                left: 3px;
+                bottom: 3px;
+            }
+            input:checked+.slider:before {
+                transform: translateX(20px);
+            }
+
+            /* System alert modal responsive */
+            #system-alert-overlay > div {
+                width: 90% !important;
+                max-width: 500px !important;
+                padding: 24px !important;
+                margin: 16px !important;
+            }
+
+            /* Custom modal responsive */
+            #custom-modal-box {
+                width: 90% !important;
+                max-width: 350px !important;
+            }
+
+            /* Header badges - hide less important ones */
+            #access-badge {
+                font-size: 0.6rem !important;
+                padding: 2px 4px !important;
+            }
+        }
+
+        /* --- SMALL MOBILE (max-width: 480px) --- */
+        @media (max-width: 480px) {
+            .header {
+                padding: 0 12px;
+                height: 50px;
+            }
+
+            .header-title {
+                font-size: 0.85rem;
+            }
+
+            /* Hide SECURE_MODE text on small screens */
+            .header > div:last-child > div:last-child {
+                display: none;
+            }
+
+            .welcome h1 {
+                font-size: 1.6rem;
+                margin-bottom: 12px;
+            }
+
+            .welcome p {
+                font-size: 0.85rem;
+                margin-bottom: 24px;
+            }
+
+            .chat-area {
+                padding: 16px 0;
+                gap: 20px;
+            }
+
+            .message {
+                padding: 0 12px;
+                gap: 10px;
+            }
+
+            .bubble {
+                max-width: 90%;
+                font-size: 0.93rem;
+                line-height: 1.6;
+            }
+
+            .message.user .bubble {
+                padding: 10px 14px;
+            }
+
+            .input-wrapper {
+                padding: 10px 12px;
+            }
+
+            .input-box {
+                padding: 10px;
+                gap: 6px;
+            }
+
+            textarea {
+                font-size: 0.93rem;
+            }
+
+            pre {
+                padding: 10px;
+                font-size: 0.78rem;
+            }
+
+            .card {
+                padding: 14px;
+            }
+
+            .card h3 {
+                font-size: 0.8rem;
+            }
+
+            .card p {
+                font-size: 0.82rem;
+            }
+
+            /* Avatar smaller on mobile */
+            .avatar {
+                width: 28px;
+                height: 28px;
+                font-size: 0.8rem;
+            }
+
+            .ai-eye {
+                width: 28px;
+                height: 28px;
+            }
+
+            .ai-pupil {
+                width: 8px;
+                height: 8px;
+            }
+
+            /* Sidebar padding on mobile */
+            .sidebar {
+                padding: 20px 16px;
+            }
+
+            .session-item {
+                padding: 10px;
+                font-size: 0.82rem;
+            }
+
+            .btn-new-chat {
+                padding: 14px;
+                font-size: 0.8rem;
+            }
+
+            /* Footer text */
+            .input-wrapper > div:last-child {
+                font-size: 0.55rem !important;
+            }
+        }
+
+        /* --- VERY SMALL SCREENS (max-width: 360px) --- */
+        @media (max-width: 360px) {
+            .welcome h1 {
+                font-size: 1.4rem;
+            }
+
+            .welcome p {
+                font-size: 0.8rem;
+            }
+
+            .bubble {
+                max-width: 95%;
+                font-size: 0.88rem;
+            }
+
+            .header {
+                height: 46px;
+            }
+
+            .header-title {
+                font-size: 0.8rem;
+            }
+        }
     </style>
 </head>
 
@@ -807,10 +1104,18 @@
             </div>
         </aside>
 
+        <!-- SIDEBAR BACKDROP (mobile) -->
+        <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
         <!-- MAIN CONTENT -->
         <main class="main-content">
             <header class="header">
-                <div class="header-title">Research Terminal</div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Open menu">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <div class="header-title">Research Terminal</div>
+                </div>
                 <div style="display:flex; gap:10px; align-items:center;">
                     <button id="header-subscribe-btn" onclick="goSubscribe()"
                         style="display:none; background:linear-gradient(135deg, #ef4444, #dc2626); border:none; color:#fff; padding:6px 14px; font-family:var(--font-mono); font-size:0.7rem; font-weight:bold; cursor:pointer; border-radius:6px; align-items:center; gap:6px; transition:all 0.2s;"
@@ -1885,6 +2190,26 @@
         // Start polling
         checkSystemAlert();
         setInterval(checkSystemAlert, 30000);
+
+        // --- MOBILE SIDEBAR TOGGLE ---
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const backdrop = document.getElementById('sidebar-backdrop');
+            sidebar.classList.toggle('open');
+            backdrop.classList.toggle('active');
+        }
+        function closeSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const backdrop = document.getElementById('sidebar-backdrop');
+            sidebar.classList.remove('open');
+            backdrop.classList.remove('active');
+        }
+        // Close sidebar when a session is clicked on mobile
+        const origLoadSession = loadSession;
+        loadSession = async function(id) {
+            closeSidebar();
+            return origLoadSession(id);
+        };
 
         // Check Admin Status
         async function checkAdminStatus() {

@@ -196,6 +196,86 @@
             pointer-events: none;
             z-index: 10;
         }
+
+        /* --- RESPONSIVE --- */
+        @media (max-width: 480px) {
+            body {
+                align-items: flex-start;
+                padding-top: 6vh;
+            }
+
+            .container {
+                width: 92%;
+                padding: 28px 20px;
+                border-radius: 8px;
+            }
+
+            .shield-icon {
+                font-size: 2rem;
+                margin-bottom: 10px;
+            }
+
+            h1 {
+                font-size: 1.1rem;
+            }
+
+            .subtitle {
+                font-size: 0.6rem;
+                margin-bottom: 18px;
+            }
+
+            .plan-card {
+                padding: 18px;
+                margin-bottom: 18px;
+            }
+
+            .plan-price {
+                font-size: 2rem;
+            }
+
+            .plan-badge {
+                font-size: 0.6rem;
+            }
+
+            .features li {
+                font-size: 0.7rem;
+                padding: 5px 0;
+            }
+
+            .btn-subscribe {
+                padding: 12px;
+                font-size: 0.82rem;
+                min-height: 44px;
+            }
+
+            .btn-back {
+                padding: 12px;
+                font-size: 0.75rem;
+                min-height: 44px;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .container {
+                width: 96%;
+                padding: 22px 14px;
+            }
+
+            .plan-price {
+                font-size: 1.8rem;
+            }
+
+            h1 {
+                font-size: 1rem;
+            }
+        }
+
+        @media (min-height: 700px) and (max-width: 480px) {
+            body {
+                align-items: center;
+                padding-top: 0;
+            }
+        }
     </style>
 </head>
 
