@@ -1114,8 +1114,6 @@
             </div>
 
             <div class="controls">
-                <span class="nav-label">🔓 UNCENSORED AI</span>
-
                 <div class="control-row" style="flex-direction:column; align-items:stretch; gap:6px;">
                     <span>Model</span>
                     <div style="display:flex; align-items:center; gap:8px;">
@@ -1127,7 +1125,7 @@
                             -webkit-appearance:none; background-image:url('data:image/svg+xml;utf8,<svg fill=&quot;%23888&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 24 24&quot; width=&quot;14&quot;><path d=&quot;M7 10l5 5 5-5z&quot;/></svg>');
                             background-repeat:no-repeat; background-position:right 8px center;
                         ">
-                            <option value="hermes" selected>Vif</option>
+                            <option value="cydonia" selected>Vif</option>
                         </select>
                     </div>
                 </div>
@@ -1358,7 +1356,7 @@
         let currentModel = 'default';
         let currentSessionId = null;
 
-        const MODEL_COLORS = { 'default': '#22c55e', 'openrouter': '#f97316', 'hermes': '#ef4444' };
+        const MODEL_COLORS = { 'default': '#22c55e', 'openrouter': '#f97316', 'cydonia': '#ef4444' };
         function updateModel(val) {
             if (!MODEL_COLORS[val]) val = 'default';
             currentModel = val;
