@@ -2203,6 +2203,48 @@ def chat():
                 last_user_msg, re.IGNORECASE
             ))
 
+        # Detect web navigation requests - bypass LLM and call MCP directly
+        web_navigate_url = None
+        web_search_query = None
+        # Pattern: "va sur / go to / ouvre / open / visite / navigate to [site]"
+        nav_match = re.search(
+            r'(?:va\s+sur|vas\s+sur|aller\s+sur|go\s+to|ouvre|open|visite|navigue?\s+(?:sur|vers|to)|rends?\s*-?\s*toi\s+sur|accede\s+[aà])\s+(.+)',
+            last_user_msg, re.IGNORECASE
+        )
+        if nav_match and mcp_manager:
+            site = nav_match.group(1).strip().rstrip('.!?')
+            # Add https:// if no protocol
+            if not site.startswith('http'):
+                # Check if it looks like a domain (has a dot) or a known site
+                known_sites = {
+                    'google': 'https://www.google.com', 'wikipedia': 'https://www.wikipedia.org',
+                    'youtube': 'https://www.youtube.com', 'twitter': 'https://twitter.com',
+                    'x': 'https://x.com', 'reddit': 'https://www.reddit.com',
+                    'github': 'https://github.com', 'facebook': 'https://www.facebook.com',
+                    'instagram': 'https://www.instagram.com', 'amazon': 'https://www.amazon.com',
+                    'netflix': 'https://www.netflix.com', 'linkedin': 'https://www.linkedin.com',
+                    'tiktok': 'https://www.tiktok.com', 'twitch': 'https://www.twitch.tv',
+                    'stackoverflow': 'https://stackoverflow.com', 'stack overflow': 'https://stackoverflow.com',
+                }
+                site_lower = site.lower().strip()
+                if site_lower in known_sites:
+                    web_navigate_url = known_sites[site_lower]
+                elif '.' in site:
+                    web_navigate_url = f"https://{site}"
+                else:
+                    web_navigate_url = f"https://www.{site}.com"
+            else:
+                web_navigate_url = site
+
+        # Pattern: "cherche / search / recherche [query]"
+        if not web_navigate_url:
+            search_match = re.search(
+                r'(?:cherche|recherche|search|trouve|find|look\s+up|google)\s+(.+)',
+                last_user_msg, re.IGNORECASE
+            )
+            if search_match and mcp_manager:
+                web_search_query = search_match.group(1).strip().rstrip('.!?')
+
         direct_image_prompt = None
         if (image_trigger or implicit_image) and mcp_manager:
             # Extract image description from user message (strip the command part)
@@ -2308,6 +2350,135 @@ def chat():
 
                 yield "data: [DONE]\n\n"
                 return  # Skip the LLM loop entirely
+
+            # DIRECT WEB NAVIGATION BYPASS - Skip LLM entirely
+            if web_navigate_url and mcp_manager:
+                loading_html = '<!--MCP_LOADING--><div class="mcp-loading">Loading page...</div><!--/MCP_LOADING-->'
+                yield f"data: {json.dumps({'content': loading_html})}\n\n"
+                try:
+                    web_server = mcp_manager.get_server('web_browser')
+                    if web_server:
+                        print(f"[WEB] Direct navigate: {web_navigate_url}", flush=True)
+                        result = web_server.execute_tool('navigate', url=web_navigate_url)
+                        yield f"data: {json.dumps({'clear_loading': True})}\n\n"
+
+                        result_data = result.get('result', {})
+                        handler_error = result_data.get('error') if isinstance(result_data, dict) else None
+
+                        if handler_error:
+                            safe_msg = _sanitize_error_for_user(handler_error)
+                            yield f"data: {json.dumps({'content': safe_msg})}\n\n"
+                        elif result.get('success') and isinstance(result_data, dict):
+                            title = result_data.get('title', '')
+                            text = result_data.get('text', result_data.get('content', ''))
+                            url = result_data.get('url', web_navigate_url)
+                            # Truncate text for display
+                            if len(text) > 3000:
+                                text = text[:3000] + "\n\n*[Content truncated...]*"
+                            response_md = f"**{title}**\n\n{url}\n\n---\n\n{text}"
+                            # Now send to LLM to summarize/present nicely
+                            summary_messages = [
+                                {"role": "system", "content": "You are Vif. The user asked to visit a webpage. Present the content naturally in the user's language. Summarize the key information. Be concise. Never write code."},
+                                {"role": "user", "content": f"I visited {url}. Here is the page content:\n\n{response_md[:4000]}\n\nPresent this to the user naturally."}
+                            ]
+                            try:
+                                summary_stream = client_openrouter.chat.completions.create(
+                                    model="thedrummer/cydonia-24b-v4.1",
+                                    messages=summary_messages, max_tokens=2000, temperature=0.7, stream=True, timeout=60,
+                                    extra_headers={"HTTP-Referer": "https://vif.lat", "X-Title": "VIF AI"}
+                                )
+                                for chunk in summary_stream:
+                                    if chunk.choices and chunk.choices[0].delta.content:
+                                        c = _sanitize_identity(chunk.choices[0].delta.content)
+                                        yield f"data: {json.dumps({'content': c})}\n\n"
+                                        final_cleaned_response += c
+                            except Exception as llm_err:
+                                # Fallback: just show raw content
+                                yield f"data: {json.dumps({'content': response_md[:2000]})}\n\n"
+                                final_cleaned_response = response_md[:2000]
+                            print(f"[OK] Direct navigate: {url} -> {len(final_cleaned_response)} chars", flush=True)
+                        else:
+                            yield f"data: {json.dumps({'content': 'Could not load the page. Please try again.'})}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'clear_loading': True})}\n\n"
+                        yield f"data: {json.dumps({'content': 'Web browsing is temporarily unavailable.'})}\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'clear_loading': True})}\n\n"
+                    yield f"data: {json.dumps({'content': 'Something went wrong. Please try again.'})}\n\n"
+                    print(f"[FAIL] Direct navigate exception: {e}", flush=True)
+
+                if db_pool and final_cleaned_response:
+                    try:
+                        conn = db_pool.getconn()
+                        cursor = conn.cursor()
+                        cursor.execute("INSERT INTO messages (session_id, role, content) VALUES (%s, 'assistant', %s)", (session_id, final_cleaned_response))
+                        conn.commit()
+                        db_pool.putconn(conn)
+                    except Exception:
+                        pass
+                yield "data: [DONE]\n\n"
+                return
+
+            # DIRECT WEB SEARCH BYPASS - Skip LLM entirely
+            if web_search_query and mcp_manager:
+                loading_html = '<!--MCP_LOADING--><div class="mcp-loading">Searching...</div><!--/MCP_LOADING-->'
+                yield f"data: {json.dumps({'content': loading_html})}\n\n"
+                try:
+                    web_server = mcp_manager.get_server('web_browser')
+                    if web_server:
+                        print(f"[WEB] Direct search: {web_search_query}", flush=True)
+                        result = web_server.execute_tool('web_search', query=web_search_query)
+                        yield f"data: {json.dumps({'clear_loading': True})}\n\n"
+
+                        result_data = result.get('result', {})
+                        handler_error = result_data.get('error') if isinstance(result_data, dict) else None
+
+                        if handler_error:
+                            safe_msg = _sanitize_error_for_user(handler_error)
+                            yield f"data: {json.dumps({'content': safe_msg})}\n\n"
+                        elif result.get('success') and isinstance(result_data, dict):
+                            # Format search results and send to LLM for natural presentation
+                            results_text = json.dumps(result_data, indent=2, ensure_ascii=False)[:4000]
+                            summary_messages = [
+                                {"role": "system", "content": "You are Vif. The user asked to search the web. Present the search results naturally in the user's language. Include relevant links. Be concise and useful. Never write code."},
+                                {"role": "user", "content": f"Search query: {web_search_query}\n\nResults:\n{results_text}\n\nPresent these results naturally."}
+                            ]
+                            try:
+                                summary_stream = client_openrouter.chat.completions.create(
+                                    model="thedrummer/cydonia-24b-v4.1",
+                                    messages=summary_messages, max_tokens=2000, temperature=0.7, stream=True, timeout=60,
+                                    extra_headers={"HTTP-Referer": "https://vif.lat", "X-Title": "VIF AI"}
+                                )
+                                for chunk in summary_stream:
+                                    if chunk.choices and chunk.choices[0].delta.content:
+                                        c = _sanitize_identity(chunk.choices[0].delta.content)
+                                        yield f"data: {json.dumps({'content': c})}\n\n"
+                                        final_cleaned_response += c
+                            except Exception as llm_err:
+                                yield f"data: {json.dumps({'content': results_text[:2000]})}\n\n"
+                                final_cleaned_response = results_text[:2000]
+                            print(f"[OK] Direct search: {web_search_query} -> {len(final_cleaned_response)} chars", flush=True)
+                        else:
+                            yield f"data: {json.dumps({'content': 'Search returned no results. Please try again.'})}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'clear_loading': True})}\n\n"
+                        yield f"data: {json.dumps({'content': 'Web search is temporarily unavailable.'})}\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'clear_loading': True})}\n\n"
+                    yield f"data: {json.dumps({'content': 'Something went wrong. Please try again.'})}\n\n"
+                    print(f"[FAIL] Direct search exception: {e}", flush=True)
+
+                if db_pool and final_cleaned_response:
+                    try:
+                        conn = db_pool.getconn()
+                        cursor = conn.cursor()
+                        cursor.execute("INSERT INTO messages (session_id, role, content) VALUES (%s, 'assistant', %s)", (session_id, final_cleaned_response))
+                        conn.commit()
+                        db_pool.putconn(conn)
+                    except Exception:
+                        pass
+                yield "data: [DONE]\n\n"
+                return
 
             import re
             TAG_REGEX = re.compile(r'^\s*\[(BROWSE|CLICK|TYPE|PRESS|READ|SCREENSHOT)(\s*[:\]])', re.IGNORECASE)
