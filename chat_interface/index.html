@@ -527,50 +527,7 @@
             margin: 0;
         }
 
-        /* Toggle Switch Custom */
-        .switch {
-            position: relative;
-            display: inline-block;
-            width: 34px;
-            height: 18px;
-        }
-
-        .switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #333;
-            transition: .4s;
-        }
-
-        .slider:before {
-            position: absolute;
-            content: "";
-            height: 14px;
-            width: 14px;
-            left: 2px;
-            bottom: 2px;
-            background-color: white;
-            transition: .4s;
-        }
-
-        input:checked+.slider:before {
-            transform: translateX(16px);
-        }
-
-        input:checked+.slider {
-            background-color: var(--text-accent);
-            box-shadow: 0 0 10px var(--text-accent);
-        }
+        /* (Toggle switches removed) */
 
         /* --- AI VISUALS (EYES & HANDS) --- */
         .ai-eye {
@@ -824,21 +781,6 @@
                 font-size: 0.9rem;
             }
 
-            /* Switch toggle - bigger for touch */
-            .switch {
-                width: 44px;
-                height: 24px;
-            }
-            .slider:before {
-                height: 18px;
-                width: 18px;
-                left: 3px;
-                bottom: 3px;
-            }
-            input:checked+.slider:before {
-                transform: translateX(20px);
-            }
-
             /* System alert modal responsive */
             #system-alert-overlay > div {
                 width: 90% !important;
@@ -1054,22 +996,6 @@
                             <option value="hermes" selected>Vif</option>
                         </select>
                     </div>
-                </div>
-
-                <div class="control-row">
-                    <span>Web Uplink</span>
-                    <label class="switch">
-                        <input type="checkbox" id="web-search-toggle">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-
-                <div class="control-row">
-                    <span>Lecture Vocale</span>
-                    <label class="switch">
-                        <input type="checkbox" id="tts-toggle">
-                        <span class="slider"></span>
-                    </label>
                 </div>
 
                 <!-- ADMIN BUTTON (Hidden by default) -->
@@ -1510,11 +1436,7 @@
             const modelSel = document.getElementById('model-select');
             if (modelSel) modelSel.addEventListener('change', saveSettings);
 
-            const webTog = document.getElementById('web-search-toggle');
-            if (webTog) webTog.addEventListener('change', saveSettings);
-
-            const ttsTog = document.getElementById('tts-toggle');
-            if (ttsTog) ttsTog.addEventListener('change', saveSettings);
+            // Web search and TTS toggles removed from UI
 
             const sessions = await loadSessionsList();
             if (sessions && sessions.length > 0) {
@@ -1557,26 +1479,12 @@
 
         function saveSettings() {
             localStorage.setItem('vif_model', currentModel);
-            localStorage.setItem('vif_web', document.getElementById('web-search-toggle').checked);
-            localStorage.setItem('vif_tts', document.getElementById('tts-toggle').checked);
         }
 
         function loadSettings() {
             const savedModel = localStorage.getItem('vif_model');
             if (savedModel) {
                 updateModel(savedModel);
-            }
-
-            const savedWeb = localStorage.getItem('vif_web');
-            if (savedWeb !== null) {
-                const webToggle = document.getElementById('web-search-toggle');
-                if (webToggle) webToggle.checked = (savedWeb === 'true');
-            }
-
-            const savedTTS = localStorage.getItem('vif_tts');
-            if (savedTTS !== null) {
-                const ttsToggle = document.getElementById('tts-toggle');
-                if (ttsToggle) ttsToggle.checked = (savedTTS === 'true');
             }
         }
 
@@ -1680,10 +1588,6 @@
                     contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(cleanText));
                     setTimeout(() => addCodeActions(contentDiv), 10);
 
-                    const ttsToggle = document.getElementById('tts-toggle');
-                    if (ttsToggle && ttsToggle.checked) {
-                        setTimeout(() => speakText(contentDiv.innerText), 500);
-                    }
                 } catch (e) {
                     contentDiv.textContent = text;
                 }
@@ -1819,7 +1723,7 @@
                 }
             }
 
-            const useWeb = document.getElementById('web-search-toggle').checked;
+            const useWeb = false;
 
             messageInput.value = '';
             messageInput.style.height = 'auto';
