@@ -1635,7 +1635,7 @@ EXTRACTED STRINGS:
         # Final Truncate
         if len(content) > 100000: content = content[:100000] + "\n...[TRUNCATED]..."
         
-        file_context = f"User uploaded '{filename}' [{analysis_type}].\n\nCONTENT:\n```\n{content}\n```\nAnalyze this."
+        file_context = f"User uploaded '{filename}' [{analysis_type}].\n\nCONTENT:\n```\n{content}\n```"
         
         # SAVE TO DB
         conn.execute('INSERT INTO messages (session_id, role, content, timestamp) VALUES (%s, %s, %s, %s)', 
@@ -1912,7 +1912,7 @@ def chat():
             if isinstance(last_msg['content'], str):
                 last_msg['content'] += (memory_context + web_context)
 
-        # FILTRAGE VISION - convert image messages to text for LLM
+        # FILTRAGE VISION + DOCUMENT - convert special messages for LLM
         final_conversation = []
         for msg in conversation_history:
             content = msg.get('content')
@@ -1922,6 +1922,10 @@ def chat():
             elif isinstance(content, dict) and content.get('type') == 'user_image':
                 # New format: user_image dict
                 final_conversation.append({"role": msg['role'], "content": f"[User uploaded an image: {content.get('text', '')}]"})
+            elif msg.get('role') == 'system' and isinstance(content, str) and "uploaded" in content[:100]:
+                # Document upload: truncate to max 15000 chars for LLM context
+                truncated = content[:15000] + "\n...[TRUNCATED]..." if len(content) > 15000 else content
+                final_conversation.append({"role": "system", "content": truncated})
             else:
                 final_conversation.append(msg)
 
