@@ -147,6 +147,7 @@ Store memory: {"mcp_call":true,"server":"memory_system","tool":"store_memory","p
 List memories: {"mcp_call":true,"server":"memory_system","tool":"list_memories","parameters":{}}
 DB user stats: {"mcp_call":true,"server":"database","tool":"get_user_stats","parameters":{}}
 Generate image: {"mcp_call":true,"server":"creative","tool":"generate_image","parameters":{"prompt":"a black cat with orange eyes"}}
+Image-to-image: {"mcp_call":true,"server":"creative","tool":"image_to_image","parameters":{"prompt":"make it look like a painting","image_url":"https://example.com/photo.jpg"}}
 TTS: {"mcp_call":true,"server":"creative","tool":"text_to_speech","parameters":{"text":"Hello world","language":"fr"}}
 Video info: {"mcp_call":true,"server":"video","tool":"video_info","parameters":{"url":"https://example.com/video.mp4"}}
 Code analysis: {"mcp_call":true,"server":"devtools","tool":"code_analysis","parameters":{"path":"file.py"}}
