@@ -2154,6 +2154,7 @@ def chat():
         # Detect image generation requests - bypass LLM and call MCP directly
         import re
         last_user_msg = user_message.lower()
+        # Pattern 1: explicit "genere une image de..."
         image_trigger = bool(re.search(
             r'(gen[eè]re|cre[ée]|dessine|draw|generate|create|make|fais|produis|montre)'
             r'.*(image|photo|picture|illustration|dessin|portrait|logo|icon[eê]?)',
@@ -2162,13 +2163,22 @@ def chat():
             r'(image|photo|dessin|illustration).*(de|of|d\'un|d\'une)',
             last_user_msg, re.IGNORECASE
         ))
+        # Pattern 2: implicit "genere moi une maison / dessine un chat" (no "image" keyword)
+        # These verbs strongly imply visual generation when followed by a noun
+        implicit_image = False
+        if not image_trigger:
+            implicit_image = bool(re.search(
+                r'^(gen[eè]re|dessine|draw|generate|create|make|cre[ée])\s*(-?\s*moi\s+)?(une?|le|la|les|du|des|un|l\'|d\')\s+\w+',
+                last_user_msg, re.IGNORECASE
+            ))
+
         direct_image_prompt = None
-        if image_trigger and mcp_manager:
+        if (image_trigger or implicit_image) and mcp_manager:
             # Extract image description from user message (strip the command part)
             desc = re.sub(
                 r'^(gen[eè]re|cre[ée]|dessine|draw|generate|create|make|fais|produis|montre)\s*'
                 r'(-?\s*moi\s*)?'
-                r'(une?\s*)?(image|photo|picture|illustration|dessin)\s*'
+                r'(une?\s*)?(image|photo|picture|illustration|dessin)?\s*'
                 r'(de|d\'|of|du|des|d\'un|d\'une)?\s*',
                 '', user_message, flags=re.IGNORECASE
             ).strip()
@@ -2294,13 +2304,14 @@ def chat():
 
                 for m in models:
                     try:
+                        print(f"[LLM] Trying model: {m} (context: {len(str(conversation_context))} chars)", flush=True)
                         response_stream = client_openrouter.chat.completions.create(
                             model=m, messages=conversation_context, max_tokens=4000, temperature=0.8, stream=True,
-                            timeout=60,
+                            timeout=90,
                             extra_headers={"HTTP-Referer": "https://vif.lat", "X-Title": "VIF AI"}
                         )
                     except Exception as e:
-                        print(f"Model {m} connect failed: {e}", flush=True)
+                        print(f"[LLM] Model {m} connect failed: {type(e).__name__}: {e}", flush=True)
                         continue
 
                     # Read stream
@@ -2361,9 +2372,9 @@ def chat():
 
                 if not current_turn_text.strip():
                     error_detail = f" ({stream_error})" if stream_error else ""
-                    retry_msg = f"\n\n*[All models failed{error_detail} - please try again]*"
+                    retry_msg = f"\n\n*[Service temporarily unavailable{error_detail} - please try again]*"
                     yield f"data: {json.dumps({'content': retry_msg})}\n\n"
-                    print(f"[FAIL] All models failed. Last error: {stream_error}", flush=True)
+                    print(f"[FAIL] All models returned empty. Models tried: {models}. Last stream_error: {stream_error}", flush=True)
                     break
 
                 has_actions = is_action_turn
