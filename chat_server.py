@@ -1728,6 +1728,8 @@ def chat():
                 conversation_history = []
                 for row in rows:
                     d_content = decrypt_data(row['content'])
+                    if not d_content or not d_content.strip():
+                        continue
                     try:
                         if isinstance(d_content, str) and (d_content.strip().startswith('[') or d_content.strip().startswith('{')):
                             d_content = json.loads(d_content)
@@ -1926,13 +1928,14 @@ def chat():
                     # No actions, we are done
                     break
 
-            # SAVE TO DB (Only the clean part that user saw)
+            # SAVE TO DB (Only the clean part that user saw, skip empty)
             try:
-                with get_db_connection() as conn2:
-                    encrypted_resp = encrypt_data(final_cleaned_response)
-                    conn2.execute('INSERT INTO messages (session_id, role, content, timestamp) VALUES (%s, %s, %s, %s)',
-                                 (session_id, 'assistant', encrypted_resp, datetime.datetime.now()))
-                    conn2.commit()
+                if final_cleaned_response.strip():
+                    with get_db_connection() as conn2:
+                        encrypted_resp = encrypt_data(final_cleaned_response)
+                        conn2.execute('INSERT INTO messages (session_id, role, content, timestamp) VALUES (%s, %s, %s, %s)',
+                                     (session_id, 'assistant', encrypted_resp, datetime.datetime.now()))
+                        conn2.commit()
 
                 if memory_core and len(final_cleaned_response) > 50:
                     memory_text = f"User: {user_message}\nVif: {final_cleaned_response}"
