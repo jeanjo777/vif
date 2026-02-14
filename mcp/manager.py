@@ -112,15 +112,53 @@ class MCPManager:
             if agent:
                 return agent.get_system_prompt()
 
-        # Compact format to reduce token usage
+        # Detailed format with parameters so the LLM knows exact call format
         server_lines = []
         for server_name, server in self.servers.items():
             if server.enabled:
-                tool_names = [t['name'] for t in server.list_tools()]
-                server_lines.append(f"  {server_name}: {', '.join(tool_names)}")
+                tool_entries = []
+                for t in server.list_tools():
+                    params = t.get('parameters', {})
+                    if params:
+                        param_str = ", ".join(f'{k}' for k in params.keys())
+                        tool_entries.append(f"{t['name']}({param_str})")
+                    else:
+                        tool_entries.append(t['name'])
+                server_lines.append(f"  {server_name}: {', '.join(tool_entries)}")
 
-        description = f"TOOLS ({len(tools)} available):\n" + "\n".join(server_lines)
-        description += '\n\nTo use a tool, respond with: {"mcp_call":true,"server":"name","tool":"tool_name","parameters":{...}}'
+        description = f"MCP TOOLS ({len(tools)} available):\n" + "\n".join(server_lines)
+        description += """
+
+TOOL CALL EXAMPLES (copy the format exactly):
+Web search: {"mcp_call":true,"server":"web_browser","tool":"web_search","parameters":{"query":"search terms"}}
+Browse URL: {"mcp_call":true,"server":"web_browser","tool":"navigate","parameters":{"url":"https://example.com"}}
+Run Python: {"mcp_call":true,"server":"code_execution","tool":"execute_python","parameters":{"code":"print('hello')"}}
+List files: {"mcp_call":true,"server":"file_system","tool":"list_directory","parameters":{"path":"."}}
+Read file: {"mcp_call":true,"server":"file_system","tool":"read_file","parameters":{"path":"file.txt"}}
+Scan ports: {"mcp_call":true,"server":"security","tool":"scan_ports","parameters":{"target":"example.com","ports":"1-1000"}}
+SSL check: {"mcp_call":true,"server":"security","tool":"check_ssl_security","parameters":{"domain":"example.com"}}
+Domain lookup: {"mcp_call":true,"server":"security","tool":"domain_lookup","parameters":{"domain":"example.com"}}
+Password test: {"mcp_call":true,"server":"security","tool":"password_strength_check","parameters":{"password":"test123"}}
+Analyze image: {"mcp_call":true,"server":"vision","tool":"analyze_image","parameters":{"image_url":"https://example.com/img.jpg"}}
+Weather: {"mcp_call":true,"server":"external_apis","tool":"get_weather","parameters":{"city":"Paris"}}
+Crypto price: {"mcp_call":true,"server":"external_apis","tool":"get_crypto_price","parameters":{"symbol":"BTC"}}
+Get time: {"mcp_call":true,"server":"external_apis","tool":"get_time","parameters":{"timezone":"Asia/Tokyo"}}
+Store memory: {"mcp_call":true,"server":"memory_system","tool":"store_memory","parameters":{"key":"preference","value":"likes red"}}
+List memories: {"mcp_call":true,"server":"memory_system","tool":"list_memories","parameters":{}}
+DB user stats: {"mcp_call":true,"server":"database","tool":"get_user_stats","parameters":{}}
+Generate image: {"mcp_call":true,"server":"creative","tool":"generate_image","parameters":{"prompt":"a black cat with orange eyes"}}
+TTS: {"mcp_call":true,"server":"creative","tool":"text_to_speech","parameters":{"text":"Hello world","language":"fr"}}
+Video info: {"mcp_call":true,"server":"video","tool":"video_info","parameters":{"url":"https://example.com/video.mp4"}}
+Code analysis: {"mcp_call":true,"server":"devtools","tool":"code_analysis","parameters":{"path":"file.py"}}
+Chart: {"mcp_call":true,"server":"data_science","tool":"create_chart","parameters":{"chart_type":"bar","data":{"labels":["A","B"],"values":[10,20]}}}
+Discord: {"mcp_call":true,"server":"integration_hub","tool":"discord_webhook","parameters":{"webhook_url":"URL","message":"Hello"}}
+Email: {"mcp_call":true,"server":"integration_hub","tool":"send_email","parameters":{"to":"user@example.com","subject":"Test","body":"Hello"}}
+Translate: {"mcp_call":true,"server":"external_apis","tool":"translate","parameters":{"text":"hello","target_lang":"fr"}}
+News: {"mcp_call":true,"server":"external_apis","tool":"get_news","parameters":{"query":"technology"}}
+RAG search: {"mcp_call":true,"server":"rag_memory","tool":"semantic_search","parameters":{"query":"search terms"}}
+Summarize: {"mcp_call":true,"server":"rag_memory","tool":"summarize_conversation","parameters":{"session_id":"current"}}
+
+REMEMBER: Output ONLY the JSON when using a tool. No text before or after."""
         return description
 
     def execute_tool(self, server_name: str, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
