@@ -1793,16 +1793,15 @@ def chat():
                 response_stream = None
                 
                 # UNCENSORED MODELS VIA OPENROUTER (ordered by preference)
-                # UNCENSORED MODELS (ordered by reliability)
                 # 1. Cydonia 24B v4.1 - Explicitly uncensored, 131K context
-                # 2. Venice Uncensored (free) - Dolphin Mistral 24B, ~2.2% refusal
-                # 3. Dolphin Mixtral 8x22B - Uncensored, 66K context
-                # 4. Dolphin Llama 3 70B - Uncensored, 8K context
+                # 2. Hermes 3 405B (free) - Nous Research, uncensored
+                # 3. Llama 3.1 8B (free) - Fast and reliable fallback
+                # 4. Venice Uncensored (free) - ~2.2% refusal rate
                 models = [
                     "thedrummer/cydonia-24b-v4.1",
-                    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-                    "cognitivecomputations/dolphin-mixtral-8x22b",
-                    "cognitivecomputations/dolphin-llama-3-70b",
+                    "nousresearch/hermes-3-llama-3.1-405b:free",
+                    "meta-llama/llama-3.1-8b-instruct:free",
+                    "venice/uncensored:free",
                 ]
                 last_error = None
                 for m in models:
