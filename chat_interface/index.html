@@ -1859,7 +1859,7 @@
 
         function addCodeActions(container) {
             // Make generated images clickable + skeleton loading
-            container.querySelectorAll('img[src*="/api/mcp/images/"]').forEach(img => {
+            container.querySelectorAll('img[src*="/api/mcp/images/"], img[src*="supabase.co/storage/"]').forEach(img => {
                 if (img.dataset.clickable) return;
                 img.dataset.clickable = 'true';
                 img.title = 'Click to open full size';
@@ -2054,6 +2054,12 @@
                                         : 'Something went wrong. Please try again.';
                                     contentDiv.innerHTML += `<br><span style="color:var(--text-muted); font-style:italic;">${safeMsg}</span>`;
                                     scrollToBottom();
+                                    continue;
+                                }
+
+                                // Update session title in sidebar
+                                if (parsed.session_title) {
+                                    loadSessionsList();
                                     continue;
                                 }
 
