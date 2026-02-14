@@ -1795,6 +1795,7 @@ def chat():
                     try:
                         response_stream = client_openrouter.chat.completions.create(
                             model=m, messages=conversation_context, max_tokens=4000, temperature=0.8, stream=True,
+                            timeout=60,
                             extra_headers={"HTTP-Referer": "https://vif.lat", "X-Title": "VIF AI"}
                         )
                         print(f"Vif model: {m}", flush=True)
@@ -1828,9 +1829,12 @@ def chat():
                 is_action_turn = False
                 BUFFER_SIZE = 150
                 streaming_started = False
+                stream_error = None
 
-                for chunk in response_stream:
-                    if chunk.choices[0].delta.content:
+                try:
+                    for chunk in response_stream:
+                        if not chunk.choices or not chunk.choices[0].delta.content:
+                            continue
                         c = chunk.choices[0].delta.content
                         full_response_for_execution += c
                         current_turn_text += c
@@ -1838,17 +1842,28 @@ def chat():
                         if not streaming_started:
                             initial_buffer += c
                             if len(initial_buffer) >= BUFFER_SIZE:
-                                if EXEC_REGEX.search(initial_buffer) or (mcp_manager and ('mcp_call' in initial_buffer or '"mcp_call"' in initial_buffer)):
+                                if EXEC_REGEX.search(initial_buffer) or (mcp_manager and ('"mcp_call"' in initial_buffer)):
                                     is_action_turn = True
                                 else:
                                     streaming_started = True
                                     yield f"data: {json.dumps({'content': initial_buffer})}\n\n"
                         elif not is_action_turn:
                             yield f"data: {json.dumps({'content': c})}\n\n"
+                except Exception as e:
+                    stream_error = str(e)
+                    print(f"Stream error: {e}", flush=True)
 
                 if not streaming_started and not is_action_turn:
-                    yield f"data: {json.dumps({'content': current_turn_text})}\n\n"
+                    if current_turn_text:
+                        yield f"data: {json.dumps({'content': current_turn_text})}\n\n"
                     streaming_started = True
+
+                if not current_turn_text.strip() or stream_error:
+                    error_msg = stream_error or "Model returned empty response"
+                    print(f"Empty/error response on turn {turn+1}: {error_msg}", flush=True)
+                    if turn == MAX_TURNS - 1 or not stream_error:
+                        yield f"data: {json.dumps({'content': '\\n\\n*[Connection lost - please resend your message]*'})}\n\n"
+                    break
 
                 has_actions = is_action_turn
                 has_mcp_call = False

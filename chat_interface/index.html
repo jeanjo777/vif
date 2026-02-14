@@ -1574,6 +1574,8 @@
                 let buffer = '';
                 let isFirstChunk = true;
 
+                let receivedDone = false;
+
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) break;
@@ -1582,22 +1584,22 @@
                     buffer += chunk;
 
                     const lines = buffer.split('\n\n');
-                    buffer = lines.pop(); // Keep partial line
+                    buffer = lines.pop();
 
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
                             const data = line.slice(6);
                             if (data === '[DONE]') {
+                                receivedDone = true;
                                 addCodeActions(contentDiv);
                                 loadSessionsList();
-                                loadCreditsStatus(); // Refresh credits after each message
+                                loadCreditsStatus();
                                 continue;
                             }
 
                             try {
                                 const parsed = JSON.parse(data);
 
-                                // HANDLE STREAM ERROR
                                 if (parsed.error) {
                                     contentDiv.innerHTML += `<br><span style="color:red; font-weight:bold;">[SYSTEM ERROR]: ${parsed.error}</span>`;
                                     scrollToBottom();
@@ -1612,21 +1614,21 @@
                                     }
                                     fullText += parsed.content;
 
-                                    // CLEANUP TECHNICAL TAGS ON CLIENT SIDE (Backup)
-                                    // Remove: [BROWSE: ...], [TYPE: ...], [PRESS: ...], [READ], [SCREENSHOT], [CLICK: ...]
                                     let cleanText = fullText.replace(/\[(BROWSE|CLICK|TYPE|PRESS|READ|SCREENSHOT).*?\]/g, "");
 
-                                    // ALLOW TARGET AND ONCLICK (Careful with XSS, but we control the renderer output)
-                                    // Note: DOMPurify might strip onclick. We need to configure it.
                                     contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(cleanText), {
                                         ADD_ATTR: ['target', 'onclick', 'style'],
-                                        ADD_TAGS: ['iframe'] // Just in case
+                                        ADD_TAGS: ['iframe']
                                     });
                                     scrollToBottom();
                                 }
                             } catch (e) { console.error("Stream Parse Error", e); }
                         }
                     }
+                }
+
+                if (!receivedDone && isFirstChunk) {
+                    contentDiv.innerHTML = '<span style="color:#fbbf24;">No response received. Please try again.</span>';
                 }
             } catch (e) {
                 console.error(e);
