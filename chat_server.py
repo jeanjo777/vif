@@ -1548,7 +1548,8 @@ def list_sessions():
 @app.route('/api/sessions', methods=['POST'])
 @login_required
 def create_session():
-    session_id = str(uuid.uuid4())
+    data = request.get_json(silent=True) or {}
+    session_id = data.get('id') or str(uuid.uuid4())
     username = session.get('username')
     created_at = datetime.datetime.now()
     title = 'New Signal'

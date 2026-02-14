@@ -1584,9 +1584,9 @@
             stopAudio(); // Stop audio on new session
             clearFileStatus();
             try {
-                const response = await fetch('/api/sessions', { method: 'POST' });
-                const data = await response.json();
-                currentSessionId = data.id;
+                // Generate local ID - session will be persisted to DB on first message
+                currentSessionId = crypto.randomUUID();
+                window._sessionPersisted = false;
 
                 messagesContainer.innerHTML = '';
                 // Re-append Welcome Screen
@@ -1606,7 +1606,18 @@
                     </div>
                 `;
                 messagesContainer.appendChild(welcome);
+            } catch (e) { console.error(e); }
+        }
 
+        async function ensureSessionPersisted() {
+            if (window._sessionPersisted) return;
+            try {
+                await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: currentSessionId })
+                });
+                window._sessionPersisted = true;
                 loadSessionsList();
             } catch (e) { console.error(e); }
         }
@@ -1627,6 +1638,7 @@
             try {
                 clearFileStatus();
                 currentSessionId = id;
+                window._sessionPersisted = true; // Already in DB
                 const response = await fetch(`/api/sessions/${id}`);
                 const msgs = await response.json();
 
@@ -1946,12 +1958,13 @@
             // Ensure Session Exists
             if (!currentSessionId) {
                 await createNewSession();
-                // If still null, error
                 if (!currentSessionId) {
                     alert("System Error: Unable to initialize memory index.");
                     return;
                 }
             }
+            // Persist session to DB on first message
+            await ensureSessionPersisted();
 
             const useWeb = false;
 
@@ -2200,6 +2213,7 @@
             // Ensure session
             if (!currentSessionId) await createNewSession();
             if (!currentSessionId) return;
+            await ensureSessionPersisted();
 
             // Show upload status with preview
             const isImage = file.type && file.type.startsWith('image/');
