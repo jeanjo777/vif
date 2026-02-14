@@ -884,7 +884,8 @@ def register():
 
         return jsonify({'success': True, 'auto_login': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Registration error: {e}")
+        return jsonify({'error': 'Registration failed. Please try again.'}), 500
     finally:
         conn.close()
 
@@ -962,7 +963,7 @@ def login():
         print(f"❌ LOGIN ERROR: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': f'Server error: {str(e)}'}), 500
+        return jsonify({'error': 'Login failed. Please try again.'}), 500
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
@@ -1419,8 +1420,8 @@ def generate_speech():
         return Response(audio_bytes, mimetype="audio/flac")
         
     except Exception as e:
-        print(f"❌ TTS Error: {e}")
-        return jsonify({'error': str(e)}), 500
+        print(f"TTS Error: {e}")
+        return jsonify({'error': 'Text-to-speech is temporarily unavailable.'}), 500
 
 @app.route('/api/upload', methods=['POST'])
 @login_required # SECURED
@@ -1565,7 +1566,7 @@ EXTRACTED STRINGS:
             
     except Exception as e:
         print(f"Upload error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'File upload failed. Please try again.'}), 500
     finally:
         conn.close()
 
@@ -1621,7 +1622,8 @@ def execute_code():
     except subprocess.TimeoutExpired:
         return jsonify({'error': 'Execution timed out (30s limit)'}), 408
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Code execution error: {e}")
+        return jsonify({'error': 'Code execution failed.'}), 500
 
 @app.route('/api/credits')
 @login_required
@@ -1656,6 +1658,34 @@ def get_credits():
         'is_subscribed': is_subscribed,
         'unlimited': is_subscribed
     })
+
+def _sanitize_error_for_user(error_msg: str) -> str:
+    """Convert technical MCP/API errors to user-friendly messages"""
+    if not error_msg:
+        return "Something went wrong. Please try again."
+    err = str(error_msg).lower()
+    if 'api_key' in err or 'api key' in err or 'not configured' in err or 'secret' in err:
+        return "This feature is temporarily unavailable. Please try again later."
+    if 'timeout' in err or 'timed out' in err:
+        return "The request took too long. Please try again."
+    if 'nsfw' in err or 'content flagged' in err or 'safety' in err:
+        return "Your request was blocked for safety reasons. Please try a different prompt."
+    if 'rate limit' in err or 'too many' in err or '429' in err:
+        return "Too many requests. Please wait a moment and try again."
+    if 'unavailable' in err or 'not available' in err:
+        return "This feature is currently unavailable."
+    if 'not found' in err:
+        return "The requested resource was not found."
+    if 'connection' in err or 'network' in err:
+        return "Connection error. Please check your internet and try again."
+    if '401' in err or 'unauthorized' in err or 'forbidden' in err or '403' in err:
+        return "Access denied. Please try again later."
+    if '500' in err or 'internal' in err or 'server error' in err:
+        return "Server error. Please try again later."
+    if 'api error' in err or 'status' in err:
+        return "An external service error occurred. Please try again."
+    # Default: don't expose raw error
+    return "Something went wrong. Please try again."
 
 @app.route('/api/chat', methods=['POST'])
 @login_required # SECURED
@@ -1857,7 +1887,8 @@ def chat():
                         handler_error = result_data.get('error') if isinstance(result_data, dict) else None
 
                         if handler_error:
-                            yield f"data: {json.dumps({'content': f'Image generation failed: {handler_error}'})}\n\n"
+                            safe_msg = _sanitize_error_for_user(handler_error)
+                            yield f"data: {json.dumps({'content': safe_msg})}\n\n"
                             print(f"[FAIL] Direct image gen error: {handler_error}", flush=True)
                         elif result.get('success') and isinstance(result_data, dict) and result_data.get('image_base64'):
                             local_path = result_data.get('local_path', '')
@@ -1872,13 +1903,14 @@ def chat():
                             print(f"[OK] Direct image gen: {direct_image_prompt[:50]}... -> {image_url}", flush=True)
                         else:
                             error_msg = result.get('error', 'Unknown error')
-                            yield f"data: {json.dumps({'content': f'Image generation failed: {error_msg}'})}\n\n"
+                            safe_msg = _sanitize_error_for_user(error_msg)
+                            yield f"data: {json.dumps({'content': safe_msg})}\n\n"
                     else:
                         yield f"data: {json.dumps({'clear_loading': True})}\n\n"
-                        yield f"data: {json.dumps({'content': 'Creative server not available.'})}\n\n"
+                        yield f"data: {json.dumps({'content': 'This feature is temporarily unavailable. Please try again later.'})}\n\n"
                 except Exception as e:
                     yield f"data: {json.dumps({'clear_loading': True})}\n\n"
-                    yield f"data: {json.dumps({'content': f'Image generation error: {str(e)}'})}\n\n"
+                    yield f"data: {json.dumps({'content': 'Something went wrong. Please try again.'})}\n\n"
                     print(f"[FAIL] Direct image gen exception: {e}", flush=True)
 
                 # Save to DB
@@ -2028,7 +2060,8 @@ def chat():
                             handler_error = result_data.get('error') if isinstance(result_data, dict) else None
 
                             if handler_error:
-                                agent_output += f"\n\nMCP ERROR: {handler_error}\n"
+                                safe_msg = _sanitize_error_for_user(handler_error)
+                                agent_output += f"\n\nThe tool encountered an issue: {safe_msg}\nIMPORTANT: Do NOT show technical details, server names, or error codes to the user. Just explain naturally that the operation could not be completed.\n"
                                 print(f"[FAIL] MCP Tool error: {mcp_server}.{mcp_tool}: {handler_error}")
 
                             elif mcp_result.get('success') and isinstance(result_data, dict) and result_data.get('image_base64'):
@@ -2044,15 +2077,8 @@ def chat():
                                     cleaned_response_chunk += img_md
                                     final_cleaned_response += img_md
 
-                                # Clean result for LLM context (no base64)
-                                clean_result = {k: v for k, v in result_data.items() if k != 'image_base64'}
-                                if image_url:
-                                    clean_result['image_url'] = image_url
-                                agent_output += f"\n\n=== MCP TOOL RESULT ===\n"
-                                agent_output += f"Server: {mcp_server}\nTool: {mcp_tool}\n"
-                                agent_output += f"Result: Image generated successfully. URL: {image_url}\n"
-                                agent_output += f"Details: {json.dumps(clean_result, indent=2)[:1500]}\n"
-                                agent_output += "======================\n"
+                                # Clean result for LLM context (no base64, no internal details)
+                                agent_output += f"\n\nImage generated successfully and displayed to the user.\n"
                                 print(f"[OK] MCP Image: {mcp_server}.{mcp_tool} -> {image_url}")
 
                             elif mcp_result.get('success') and isinstance(result_data, dict) and result_data.get('audio_base64'):
@@ -2067,40 +2093,31 @@ def chat():
                                     cleaned_response_chunk += audio_html
                                     final_cleaned_response += audio_html
 
-                                clean_result = {k: v for k, v in result_data.items() if k != 'audio_base64'}
-                                if audio_url:
-                                    clean_result['audio_url'] = audio_url
-                                agent_output += f"\n\n=== MCP TOOL RESULT ===\n"
-                                agent_output += f"Server: {mcp_server}\nTool: {mcp_tool}\n"
-                                agent_output += f"Result: Audio generated. URL: {audio_url}\n"
-                                agent_output += f"Details: {json.dumps(clean_result, indent=2)[:1500]}\n"
-                                agent_output += "======================\n"
+                                agent_output += f"\n\nAudio generated successfully and displayed to the user.\n"
                                 print(f"[OK] MCP Audio: {mcp_server}.{mcp_tool} -> {audio_url}")
 
                             elif mcp_result.get('success'):
-                                # Normal result - strip any large binary fields
+                                # Normal result - strip any large binary fields and internal metadata
                                 clean_result = result_data
                                 if isinstance(clean_result, dict):
                                     clean_result = {k: v for k, v in clean_result.items()
-                                                   if k not in ('audio_base64', 'image_base64')}
-                                agent_output += f"\n\n=== MCP TOOL RESULT ===\n"
-                                agent_output += f"Server: {mcp_server}\nTool: {mcp_tool}\n"
-                                agent_output += f"Result: {json.dumps(clean_result, indent=2)[:2000]}\n"
-                                agent_output += "======================\n"
+                                                   if k not in ('audio_base64', 'image_base64', 'mcp_server', 'mcp_tool', 'cached', 'timestamp')}
+                                agent_output += f"\n\nTool result (present this naturally to the user, NEVER show raw JSON or technical details):\n{json.dumps(clean_result, indent=2)[:2000]}\n"
                                 print(f"[OK] MCP Tool: {mcp_server}.{mcp_tool}")
                             else:
                                 error_msg = mcp_result.get('error', 'Unknown error')
-                                agent_output += f"\n\nMCP ERROR: {error_msg}\n"
+                                safe_msg = _sanitize_error_for_user(error_msg)
+                                agent_output += f"\n\nThe operation could not be completed: {safe_msg}\nIMPORTANT: Do NOT show technical details to the user.\n"
                                 print(f"[FAIL] MCP Error: {error_msg}")
                     except Exception as e:
-                        agent_output += f"\n\nMCP EXECUTION ERROR: {str(e)}\n"
+                        agent_output += f"\n\nThe operation encountered an error. Please try again.\n"
                         print(f"[FAIL] MCP Exception: {e}")
 
                 # Execute web browsing actions
                 if has_actions and not has_mcp_call:
                      nav = get_web_navigator()
                      if not nav:
-                         agent_output = "\nACTION ERROR: WebAgent unavailable. Please restart server."
+                         agent_output = "\nWeb browsing is temporarily unavailable. Respond to the user without browsing."
                      else:
                          lines = full_response_for_execution.split('\n')
                          for line in lines:
@@ -2155,7 +2172,7 @@ def chat():
 
     except Exception as e:
         print(f"Chat Error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Something went wrong. Please try again.'}), 500
 
 if __name__ == '__main__':
     print("\n" + "="*50)

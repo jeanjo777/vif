@@ -1866,10 +1866,10 @@
                         loadCreditsStatus();
                         return;
                     }
-                    throw new Error(errorData.error || "Server Error (JSON)");
+                    throw new Error("service_error");
                 }
 
-                if (!response.ok) throw new Error("Network Error: " + response.statusText);
+                if (!response.ok) throw new Error("connection_error");
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
@@ -1904,7 +1904,10 @@
                                 const parsed = JSON.parse(data);
 
                                 if (parsed.error) {
-                                    contentDiv.innerHTML += `<br><span style="color:red; font-weight:bold;">[SYSTEM ERROR]: ${parsed.error}</span>`;
+                                    const safeMsg = parsed.error === 'NO_CREDITS'
+                                        ? 'You have used all your free credits.'
+                                        : 'Something went wrong. Please try again.';
+                                    contentDiv.innerHTML += `<br><span style="color:var(--text-muted); font-style:italic;">${safeMsg}</span>`;
                                     scrollToBottom();
                                     continue;
                                 }
@@ -1948,9 +1951,8 @@
                 }
             } catch (e) {
                 console.error(e);
-                contentDiv.innerHTML = `<div style="border:1px solid red; padding:10px; color:red; font-family:monospace;">
-                    <strong>⚠️ CONNECTION FAILURE</strong><br>
-                    ${e.message}
+                contentDiv.innerHTML = `<div style="padding:10px; color:var(--text-muted); font-style:italic;">
+                    Connection lost. Please check your internet and try again.
                 </div>`;
             }
 
