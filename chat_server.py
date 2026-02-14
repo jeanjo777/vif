@@ -1386,9 +1386,16 @@ def load_session(session_id):
         d_content = decrypt_data(row['content'])
         try:
             if isinstance(d_content, str) and (d_content.strip().startswith('[') or d_content.strip().startswith('{')):
-                # Safe load
                 d_content = json.loads(d_content)
         except: pass
+
+        # Strip heavy vision_data from user_image messages (not needed for display)
+        if isinstance(d_content, dict) and d_content.get('type') == 'user_image':
+            d_content = {
+                'type': 'user_image',
+                'text': d_content.get('text', ''),
+                'image_url': d_content.get('image_url', '')
+            }
 
         decrypted_history.append({
             'id': row['id'],
@@ -1517,19 +1524,38 @@ def upload_file():
         # --- 1. IMAGE (VISION) ---
         if mime_type and mime_type.startswith('image/'):
             image_data = file.read()
+
+            # Save image to persistent storage (DB + filesystem)
+            import uuid as _uuid
+            img_ext = os.path.splitext(filename)[1].lower() or '.jpg'
+            stored_name = f"upload_{_uuid.uuid4().hex[:12]}{img_ext}"
+            img_mime = mime_type or ('image/jpeg' if img_ext in ('.jpg', '.jpeg') else 'image/png')
+
+            # Save to filesystem
+            creative_dir = "/tmp/vif_creative"
+            os.makedirs(creative_dir, exist_ok=True)
+            with open(os.path.join(creative_dir, stored_name), 'wb') as f:
+                f.write(image_data)
+
+            # Save to DB for persistence
+            save_image_to_db(stored_name, image_data, img_mime)
+
+            image_url = f"/api/mcp/images/{stored_name}"
+
+            # Store message with image URL (not base64) + base64 for LLM vision context
             b64_image = base64.b64encode(image_data).decode('utf-8')
-            
-            # Context for DB (encrypted)
-            db_content = json.dumps([
-                    {"type": "text", "text": f"J'ai uploadé cette image : {filename}. Analyse-la."},
-                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_image}"}}
-            ])
-            
-            conn.execute('INSERT INTO messages (session_id, role, content, timestamp) VALUES (%s, %s, %s, %s)', 
+            db_content = json.dumps({
+                "type": "user_image",
+                "text": f"Image: {filename}",
+                "image_url": image_url,
+                "vision_data": f"data:{img_mime};base64,{b64_image}"
+            })
+
+            conn.execute('INSERT INTO messages (session_id, role, content, timestamp) VALUES (%s, %s, %s, %s)',
                             (session_id, 'user', encrypt_data(db_content), datetime.datetime.now()))
             conn.commit()
-            
-            return jsonify({'success': True, 'filename': filename, 'type': 'image'})
+
+            return jsonify({'success': True, 'filename': filename, 'type': 'image', 'image_url': image_url})
 
         # --- 2. DOCUMENTS (TEXT EXTRACTION) ---
         # PDF
@@ -1886,12 +1912,16 @@ def chat():
             if isinstance(last_msg['content'], str):
                 last_msg['content'] += (memory_context + web_context)
 
-        # FILTRAGE VISION
+        # FILTRAGE VISION - convert image messages to text for LLM
         final_conversation = []
         for msg in conversation_history:
             content = msg.get('content')
             if isinstance(content, list):
-                final_conversation.append({"role": msg['role'], "content": "[Image uploaded - description in context]"})
+                # Old format: JSON array with image_url
+                final_conversation.append({"role": msg['role'], "content": "[User uploaded an image]"})
+            elif isinstance(content, dict) and content.get('type') == 'user_image':
+                # New format: user_image dict
+                final_conversation.append({"role": msg['role'], "content": f"[User uploaded an image: {content.get('text', '')}]"})
             else:
                 final_conversation.append(msg)
 
