@@ -1,6 +1,6 @@
 """
 MCP Creative - Image generation, audio synthesis, text-to-speech
-Uses Higgsfield AI API for image generation
+Uses Higgsfield AI API (FLUX Pro) for image generation
 """
 from .base import MCPServer, MCPTool
 from typing import Dict, Any
@@ -183,7 +183,7 @@ class CreativeMCP(MCPServer):
         ))
 
     def _generate_image(self, prompt: str, aspect_ratio: str = "1:1", **kwargs) -> Dict[str, Any]:
-        """Generate image using Higgsfield AI V2 API (FLUX Pro)"""
+        """Generate image using Higgsfield AI (FLUX Pro)"""
         try:
             if not self.higgsfield_api_key or not self.higgsfield_secret:
                 return {"error": "HIGGSFIELD_API_KEY/HIGGSFIELD_SECRET not configured."}
@@ -194,15 +194,14 @@ class CreativeMCP(MCPServer):
                 "Content-Type": "application/json",
                 "Accept": "application/json"
             }
-
-            # Submit image generation job (V2 API)
             payload = {
                 "prompt": prompt,
                 "aspect_ratio": aspect_ratio,
-                "safety_tolerance": 2
+                "safety_tolerance": 6
             }
 
             api_url = f"{self.higgsfield_base_url}/flux-pro/kontext/max/text-to-image"
+            print(f"[MCP] Generating image via Higgsfield FLUX Pro: {prompt[:80]}...", flush=True)
             response = requests.post(api_url, headers=headers, json=payload, timeout=30)
 
             if response.status_code != 200:
@@ -215,12 +214,9 @@ class CreativeMCP(MCPServer):
             if not request_id or not status_url:
                 return {"error": f"No request_id in response: {str(job_data)[:200]}"}
 
-            # Poll for results (max 90s to stay under gunicorn 120s timeout)
-            max_polls = 30
-            poll_interval = 3
-
-            for _ in range(max_polls):
-                time.sleep(poll_interval)
+            # Poll for results (max 90s)
+            for _ in range(30):
+                time.sleep(3)
                 poll_response = requests.get(status_url, headers=headers, timeout=15)
                 if poll_response.status_code != 200:
                     continue
@@ -234,15 +230,13 @@ class CreativeMCP(MCPServer):
                         return {"error": "Job completed but no image URL in results"}
 
                     image_url = images[0]["url"]
-
-                    # Download the image
                     img_response = requests.get(image_url, timeout=30)
                     if img_response.status_code != 200:
                         return {"error": f"Failed to download image: {img_response.status_code}"}
 
                     image_data = img_response.content
 
-                    # Compress to JPEG for faster transfer
+                    # Compress to JPEG
                     ext = '.jpg'
                     try:
                         from PIL import Image
@@ -255,13 +249,11 @@ class CreativeMCP(MCPServer):
                     except ImportError:
                         ext = '.png'
 
-                    # Save image
                     save_path = str(self.workspace / f"generated_{abs(hash(prompt))}{ext}")
                     with open(save_path, 'wb') as f:
                         f.write(image_data)
 
                     image_b64 = base64.b64encode(image_data).decode('utf-8')
-
                     return {
                         "success": True,
                         "prompt": prompt,
@@ -273,9 +265,7 @@ class CreativeMCP(MCPServer):
                     }
 
                 elif status == "failed":
-                    return {"error": "Image generation failed"}
-                elif status == "nsfw":
-                    return {"error": "Image generation blocked: content flagged as NSFW"}
+                    return {"error": "Image generation failed on server"}
 
             return {"error": "Image generation timed out after 90 seconds"}
 
