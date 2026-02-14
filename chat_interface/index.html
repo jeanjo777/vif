@@ -1787,6 +1787,8 @@
                 try {
                     // CLEANUP TECHNICAL TAGS (History/Reload Fix)
                     let cleanText = text.replace(/\[(BROWSE|CLICK|TYPE|PRESS|READ|SCREENSHOT).*?\]/g, "");
+                    // Strip leaked MCP JSON tool calls
+                    cleanText = cleanText.replace(/\{"mcp_call"\s*:\s*true[^}]*\}/g, "");
                     contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(cleanText), {
                         ADD_ATTR: ['target', 'onclick', 'style', 'controls', 'src', 'class'],
                         ADD_TAGS: ['iframe', 'audio']
@@ -2060,6 +2062,7 @@
                                     fullText = fullText.replace(/<!--MCP_LOADING-->.*?<!--\/MCP_LOADING-->/gs, '');
                                     // Re-render immediately to remove spinner
                                     let cleanText = fullText.replace(/\[(BROWSE|CLICK|TYPE|PRESS|READ|SCREENSHOT).*?\]/g, "");
+                                    cleanText = cleanText.replace(/\{"mcp_call"\s*:\s*true[^}]*\}/g, "");
                                     contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(cleanText), {
                                         ADD_ATTR: ['target', 'onclick', 'style', 'controls', 'src', 'class'],
                                         ADD_TAGS: ['iframe', 'audio']
@@ -2076,6 +2079,7 @@
                                     fullText += parsed.content;
 
                                     let cleanText = fullText.replace(/\[(BROWSE|CLICK|TYPE|PRESS|READ|SCREENSHOT).*?\]/g, "");
+                                    cleanText = cleanText.replace(/\{"mcp_call"\s*:\s*true[^}]*\}/g, "");
 
                                     contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(cleanText), {
                                         ADD_ATTR: ['target', 'onclick', 'style', 'controls', 'src', 'class'],

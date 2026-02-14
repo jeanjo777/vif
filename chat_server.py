@@ -534,6 +534,7 @@ After the tool executes, you will receive the result as a system message. THEN y
 
 WHEN TO USE TOOLS vs WHEN TO ANSWER DIRECTLY:
 - Questions about knowledge (history, science, math, coding help) -> Answer directly
+- If the user uploaded a document (PDF, DOCX, etc.), the content is ALREADY in the conversation as a system message. Read it directly and answer. Do NOT use vision.analyze_image or any tool to read it - you already have the content.
 - Requests to DO something (scan, search, browse, execute, analyze, generate image, draw, create) -> Use MCP tool
 - "generate/draw/create an image/picture/photo of X" -> ALWAYS use creative.generate_image
 - "transform/modify/edit image" -> ALWAYS use creative.image_to_image or creative.edit_image
@@ -2089,7 +2090,11 @@ def chat():
                                         streaming_started = True
                                         yield f"data: {json.dumps({'content': initial_buffer})}\n\n"
                             elif not is_action_turn:
-                                yield f"data: {json.dumps({'content': c})}\n\n"
+                                # Check if MCP JSON appeared mid-stream - stop streaming immediately
+                                if mcp_manager and '"mcp_call"' in current_turn_text:
+                                    is_action_turn = True
+                                else:
+                                    yield f"data: {json.dumps({'content': c})}\n\n"
                     except Exception as e:
                         stream_error = str(e)
                         print(f"Stream error ({m}): {e}", flush=True)
