@@ -1809,7 +1809,7 @@ def chat():
         # Use specialized system prompt based on selected model
         model_prompt = get_system_prompt(selected_model)
 
-        # Detect image generation requests and inject tool reminder into system prompt
+        # Detect image generation requests - bypass LLM and call MCP directly
         import re
         last_user_msg = user_message.lower()
         image_trigger = bool(re.search(
@@ -1820,8 +1820,19 @@ def chat():
             r'(image|photo|dessin|illustration).*(de|of|d\'un|d\'une)',
             last_user_msg, re.IGNORECASE
         ))
-        if image_trigger:
-            model_prompt += '\n\n[ACTIVE INSTRUCTION] The user wants an image generated. You MUST respond with ONLY this JSON (replace PROMPT with enhanced description):\n{"mcp_call":true,"server":"creative","tool":"generate_image","parameters":{"prompt":"PROMPT"}}\nDo NOT say you cannot generate images. Do NOT suggest alternatives. Output ONLY the JSON.'
+        direct_image_prompt = None
+        if image_trigger and mcp_manager:
+            # Extract image description from user message (strip the command part)
+            desc = re.sub(
+                r'^(gen[eè]re|cre[ée]|dessine|draw|generate|create|make|fais|produis|montre)\s*'
+                r'(-?\s*moi\s*)?'
+                r'(une?\s*)?(image|photo|picture|illustration|dessin)\s*'
+                r'(de|d\'|of|du|des|d\'un|d\'une)?\s*',
+                '', user_message, flags=re.IGNORECASE
+            ).strip()
+            if not desc:
+                desc = user_message  # Fallback: use entire message as prompt
+            direct_image_prompt = desc
 
         messages = [{"role": "system", "content": model_prompt}] + final_conversation
 
@@ -1831,7 +1842,59 @@ def chat():
             conversation_context = messages[:] # Clone context
             MAX_TURNS = 3
             final_cleaned_response = ""
-            
+
+            # DIRECT IMAGE GENERATION BYPASS - Skip LLM entirely
+            if direct_image_prompt and mcp_manager:
+                yield f"data: {json.dumps({'content': '<!--MCP_LOADING--><div class=\"mcp-loading\">Generating image...</div><!--/MCP_LOADING-->'})}\n\n"
+                try:
+                    creative_server = mcp_manager.get_server('creative')
+                    if creative_server:
+                        result = creative_server.execute_tool('generate_image', prompt=direct_image_prompt)
+                        yield f"data: {json.dumps({'clear_loading': True})}\n\n"
+
+                        result_data = result.get('result', {})
+                        handler_error = result_data.get('error') if isinstance(result_data, dict) else None
+
+                        if handler_error:
+                            yield f"data: {json.dumps({'content': f'Image generation failed: {handler_error}'})}\n\n"
+                            print(f"[FAIL] Direct image gen error: {handler_error}", flush=True)
+                        elif result.get('success') and isinstance(result_data, dict) and result_data.get('image_base64'):
+                            local_path = result_data.get('local_path', '')
+                            filename = os.path.basename(local_path) if local_path else ''
+                            image_url = f"/api/mcp/images/{filename}" if filename else None
+                            if image_url:
+                                img_md = f"\n\n![Image]({image_url})\n\n"
+                                yield f"data: {json.dumps({'content': img_md})}\n\n"
+                                final_cleaned_response = img_md
+                            size_kb = result_data.get('file_size_kb', '?')
+                            yield f"data: {json.dumps({'content': f'*Image generated ({size_kb} KB)*'})}\n\n"
+                            print(f"[OK] Direct image gen: {direct_image_prompt[:50]}... -> {image_url}", flush=True)
+                        else:
+                            error_msg = result.get('error', 'Unknown error')
+                            yield f"data: {json.dumps({'content': f'Image generation failed: {error_msg}'})}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'clear_loading': True})}\n\n"
+                        yield f"data: {json.dumps({'content': 'Creative server not available.'})}\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'clear_loading': True})}\n\n"
+                    yield f"data: {json.dumps({'content': f'Image generation error: {str(e)}'})}\n\n"
+                    print(f"[FAIL] Direct image gen exception: {e}", flush=True)
+
+                # Save to DB
+                if db_pool and final_cleaned_response:
+                    try:
+                        conn = db_pool.getconn()
+                        cursor = conn.cursor()
+                        cursor.execute("INSERT INTO messages (session_id, role, content) VALUES (%s, 'assistant', %s)",
+                                      (session_id, final_cleaned_response))
+                        conn.commit()
+                        db_pool.putconn(conn)
+                    except Exception:
+                        pass
+
+                yield "data: [DONE]\n\n"
+                return  # Skip the LLM loop entirely
+
             import re
             TAG_REGEX = re.compile(r'^\s*\[(BROWSE|CLICK|TYPE|PRESS|READ|SCREENSHOT)(\s*[:\]])', re.IGNORECASE)
             EXEC_REGEX = re.compile(r'\[\s*(BROWSE|CLICK|TYPE|PRESS|READ|SCREENSHOT)\s*(?::\s*(.*?))?\s*\]', re.IGNORECASE)
