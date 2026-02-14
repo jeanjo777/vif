@@ -51,8 +51,8 @@ class CreativeMCP(MCPServer):
                     "size": {
                         "type": "string",
                         "description": "Image dimensions",
-                        "enum": ["1024x1024", "1152x2048", "2048x1152"],
-                        "default": "1024x1024"
+                        "enum": ["1536x1536", "2048x1152", "1152x2048", "2048x1536", "1536x2048"],
+                        "default": "1536x1536"
                     }
                 },
                 "required": ["prompt"]
@@ -189,7 +189,7 @@ class CreativeMCP(MCPServer):
         ))
 
     def _generate_image(self, prompt: str, quality: str = "720p",
-                       size: str = "1024x1024") -> Dict[str, Any]:
+                       size: str = "1536x1536") -> Dict[str, Any]:
         """Generate image using Higgsfield AI (Soul model)"""
         try:
             if not self.higgsfield_api_key or not self.higgsfield_secret:
