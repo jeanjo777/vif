@@ -396,6 +396,20 @@
             margin-bottom: 0;
         }
 
+        .bubble img {
+            max-width: 100%;
+            max-height: 512px;
+            border-radius: 8px;
+            border: 1px solid var(--border-light);
+            margin: 8px 0;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .bubble img:hover {
+            opacity: 0.9;
+        }
+
         /* Code blocks */
         pre {
             background: #111;
@@ -1585,7 +1599,10 @@
                 try {
                     // CLEANUP TECHNICAL TAGS (History/Reload Fix)
                     let cleanText = text.replace(/\[(BROWSE|CLICK|TYPE|PRESS|READ|SCREENSHOT).*?\]/g, "");
-                    contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(cleanText));
+                    contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(cleanText), {
+                        ADD_ATTR: ['target', 'onclick', 'style', 'controls', 'src'],
+                        ADD_TAGS: ['iframe', 'audio']
+                    });
                     setTimeout(() => addCodeActions(contentDiv), 10);
 
                 } catch (e) {
@@ -1651,6 +1668,14 @@
         }
 
         function addCodeActions(container) {
+            // Make generated images clickable (open full size)
+            container.querySelectorAll('img[src*="/api/mcp/images/"]').forEach(img => {
+                if (img.dataset.clickable) return;
+                img.dataset.clickable = 'true';
+                img.title = 'Click to open full size';
+                img.onclick = () => window.open(img.src, '_blank');
+            });
+
             const codeBlocks = container.querySelectorAll('pre');
             codeBlocks.forEach(pre => {
                 if (pre.querySelector('.code-actions')) return;
@@ -1833,8 +1858,8 @@
                                     let cleanText = fullText.replace(/\[(BROWSE|CLICK|TYPE|PRESS|READ|SCREENSHOT).*?\]/g, "");
 
                                     contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(cleanText), {
-                                        ADD_ATTR: ['target', 'onclick', 'style'],
-                                        ADD_TAGS: ['iframe']
+                                        ADD_ATTR: ['target', 'onclick', 'style', 'controls', 'src'],
+                                        ADD_TAGS: ['iframe', 'audio']
                                     });
                                     scrollToBottom();
                                 }
