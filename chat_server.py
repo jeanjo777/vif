@@ -426,10 +426,10 @@ except Exception as e:
 # Primary: HuggingFace Inference API (Llama 3.3 70B Abliterated - ~0% censorship)
 hf_token = get_env_var('HuggingFace_API_KEY')
 client_hf = OpenAI(
-    base_url="https://api-inference.huggingface.co/models/huihui-ai/Llama-3.3-70B-Instruct-abliterated/v1",
+    base_url="https://router.huggingface.co/models/huihui-ai/Llama-3.3-70B-Instruct-abliterated/v1",
     api_key=hf_token
 ) if hf_token else None
-# Fallback: OpenRouter (Dolphin 3.0 R1)
+# Fallback: OpenRouter (Hermes 405B, Llama 8B, Venice uncensored)
 client_openrouter = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=openrouter_api_key)
 
 if client_hf:
@@ -1386,7 +1386,7 @@ def generate_speech():
         return jsonify({'error': 'TTS Server Config Error (Token)'}), 500
 
     try:
-        client = InferenceClient(provider="hf-inference", api_key=hf_token)
+        client = InferenceClient(provider="auto", api_key=hf_token)
         # Note: 'provider="auto"' ou "hf-inference". Kokoro is a specific model.
         
         audio_bytes = client.text_to_speech(
@@ -1824,9 +1824,9 @@ def chat():
                 # Fallback to OpenRouter if HF failed or unavailable
                 if not response_stream:
                     fallback_models = [
-                        "cognitivecomputations/dolphin3.0-r1-mistral-24b",
-                        "cognitivecomputations/dolphin3.0-r1-mistral-24b:free",
-                        "cognitivecomputations/dolphin3.0-mistral-24b:free"
+                        "nousresearch/hermes-3-llama-3.1-405b:free",
+                        "meta-llama/llama-3.1-8b-instruct:free",
+                        "venice/uncensored:free"
                     ]
                     for m in fallback_models:
                         try:
