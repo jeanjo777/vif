@@ -629,7 +629,7 @@ def admin_data():
             LEFT JOIN sessions s ON u.username = s.username
             LEFT JOIN messages m ON s.id = m.session_id
             LEFT JOIN payments p ON u.username = p.username
-            GROUP BY u.username
+            GROUP BY u.username, u.has_paid, u.created_at, u.last_login, u.ip_address, u.user_agent, u.subscription_expiry
             ORDER BY u.last_login DESC
         '''
         users = conn.execute(query).fetchall()
@@ -1793,15 +1793,16 @@ def chat():
                 response_stream = None
                 
                 # UNCENSORED MODELS VIA OPENROUTER (ordered by preference)
-                # 1. Venice Uncensored (paid) - Dolphin Mistral 24B, ~2.2% refusal
-                # 2. Cydonia 24B v4.1 - Explicitly uncensored, 131K context
-                # 3. Venice Uncensored (free) - Same model, free tier
-                # 4. Dolphin Mixtral 8x22B - Uncensored, 66K context
+                # UNCENSORED MODELS (ordered by reliability)
+                # 1. Cydonia 24B v4.1 - Explicitly uncensored, 131K context
+                # 2. Venice Uncensored (free) - Dolphin Mistral 24B, ~2.2% refusal
+                # 3. Dolphin Mixtral 8x22B - Uncensored, 66K context
+                # 4. Dolphin Llama 3 70B - Uncensored, 8K context
                 models = [
-                    "venice/uncensored",
                     "thedrummer/cydonia-24b-v4.1",
-                    "venice/uncensored:free",
+                    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
                     "cognitivecomputations/dolphin-mixtral-8x22b",
+                    "cognitivecomputations/dolphin-llama-3-70b",
                 ]
                 last_error = None
                 for m in models:
