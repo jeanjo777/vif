@@ -2245,6 +2245,157 @@ def chat():
             if search_match and mcp_manager:
                 web_search_query = search_match.group(1).strip().rstrip('.!?')
 
+        # Detect ALL other MCP tool triggers - bypass LLM for each
+        direct_mcp_action = None  # Will be set to (server, tool, params, loading_msg, summary_prompt)
+
+        if not web_navigate_url and not web_search_query and mcp_manager:
+            # --- WEATHER ---
+            weather_match = re.search(
+                r'(?:m[eé]t[eé]o|weather|quel\s+temps|temps\s+(?:qu\'il\s+fait|fait[- ]il)|what.s\s+the\s+weather)\s*(?:a|à|in|de|pour|for|at)?\s*(.+)?',
+                last_user_msg, re.IGNORECASE
+            )
+            if weather_match:
+                city = (weather_match.group(1) or 'Paris').strip().rstrip('.!?')
+                direct_mcp_action = ('external_apis', 'get_weather', {'location': city},
+                    'Checking weather...', f"Present this weather data naturally in the user's language for {city}.")
+
+            # --- CRYPTO ---
+            if not direct_mcp_action:
+                crypto_match = re.search(
+                    r'(?:prix|price|cours|valeur|value|combien\s+(?:vaut|coute|co[uû]te))\s*(?:du|de|of|le|la|des)?\s*(bitcoin|btc|ethereum|eth|solana|sol|dogecoin|doge|xrp|bnb|cardano|ada|litecoin|ltc|crypto|shib|avax|dot|matic|link)',
+                    last_user_msg, re.IGNORECASE
+                )
+                if crypto_match:
+                    coin_map = {'bitcoin':'BTC','btc':'BTC','ethereum':'ETH','eth':'ETH','solana':'SOL','sol':'SOL',
+                                'dogecoin':'DOGE','doge':'DOGE','xrp':'XRP','bnb':'BNB','cardano':'ADA','ada':'ADA',
+                                'litecoin':'LTC','ltc':'LTC','shib':'SHIB','avax':'AVAX','dot':'DOT','matic':'MATIC','link':'LINK','crypto':'BTC'}
+                    symbol = coin_map.get(crypto_match.group(1).lower(), 'BTC')
+                    direct_mcp_action = ('external_apis', 'get_crypto_price', {'symbol': symbol},
+                        'Fetching crypto price...', f"Present this crypto price data naturally in the user's language.")
+
+            # --- NEWS ---
+            if not direct_mcp_action:
+                news_match = re.search(
+                    r'(?:actualit[eé]s?|actu|news|nouvelles|infos|informations)\s*(?:sur|about|on|de|du|des)?\s*(.*)?',
+                    last_user_msg, re.IGNORECASE
+                )
+                if news_match:
+                    topic = (news_match.group(1) or '').strip().rstrip('.!?') or None
+                    direct_mcp_action = ('external_apis', 'get_news', {'query': topic, 'limit': 5},
+                        'Fetching news...', f"Present these news headlines naturally in the user's language.")
+
+            # --- TRANSLATE ---
+            if not direct_mcp_action:
+                translate_match = re.search(
+                    r'(?:tradui[st]?|translate|traduction)\s+(.+?)(?:\s+(?:en|in|to|vers)\s+([\w]+))?$',
+                    last_user_msg, re.IGNORECASE
+                )
+                if translate_match:
+                    text = translate_match.group(1).strip().strip('"\'')
+                    target = (translate_match.group(2) or 'en').strip().lower()
+                    lang_map = {'francais':'fr','french':'fr','anglais':'en','english':'en','espagnol':'es','spanish':'es',
+                                'allemand':'de','german':'de','italien':'it','italian':'it','portugais':'pt','portuguese':'pt',
+                                'chinois':'zh','chinese':'zh','japonais':'ja','japanese':'ja','arabe':'ar','arabic':'ar',
+                                'russe':'ru','russian':'ru','coreen':'ko','korean':'ko'}
+                    target_code = lang_map.get(target, target[:2] if len(target) > 2 else target)
+                    direct_mcp_action = ('external_apis', 'translate', {'text': text, 'target_lang': target_code},
+                        'Translating...', "Present the translation naturally.")
+
+            # --- TIME ---
+            if not direct_mcp_action:
+                time_match = re.search(
+                    r'(?:quelle\s+heure|what\s+time|heure\s+(?:a|à|in)|l\'heure\s+(?:a|à|in))\s*(?:est[- ]il\s*)?(?:a|à|in)?\s*(.*)?',
+                    last_user_msg, re.IGNORECASE
+                )
+                if time_match:
+                    tz = (time_match.group(1) or '').strip().rstrip('.!?')
+                    tz_map = {'paris':'Europe/Paris','new york':'America/New_York','tokyo':'Asia/Tokyo',
+                              'londres':'Europe/London','london':'Europe/London','los angeles':'America/Los_Angeles',
+                              'la':'America/Los_Angeles','berlin':'Europe/Berlin','sydney':'Australia/Sydney',
+                              'dubai':'Asia/Dubai','hong kong':'Asia/Hong_Kong','pekin':'Asia/Shanghai',
+                              'beijing':'Asia/Shanghai','moscou':'Europe/Moscow','moscow':'Europe/Moscow'}
+                    timezone = tz_map.get(tz.lower(), tz) if tz else 'Europe/Paris'
+                    direct_mcp_action = ('external_apis', 'get_time', {'timezone': timezone},
+                        'Getting time...', f"Tell the user the current time naturally in their language.")
+
+            # --- TTS (Text-to-Speech) ---
+            if not direct_mcp_action:
+                tts_match = re.search(
+                    r'(?:dis|lis|parle|prononce|say|speak|read\s+aloud|text\s+to\s+speech|tts)\s+["\']?(.+?)["\']?\s*$',
+                    last_user_msg, re.IGNORECASE
+                )
+                if tts_match:
+                    tts_text = tts_match.group(1).strip()
+                    direct_mcp_action = ('creative', 'text_to_speech', {'text': tts_text},
+                        'Generating audio...', None)  # None = no LLM summary needed
+
+            # --- PORT SCAN ---
+            if not direct_mcp_action:
+                scan_match = re.search(
+                    r'(?:scan(?:ne)?|nmap)\s*(?:les\s+)?(?:ports?\s+(?:de|of|sur|on)\s+)?(.+?)(?:\s+(?:ports?\s*)?([\d\-,]+))?$',
+                    last_user_msg, re.IGNORECASE
+                )
+                if scan_match:
+                    target = scan_match.group(1).strip().rstrip('.!?')
+                    ports = scan_match.group(2) or '1-1000'
+                    direct_mcp_action = ('security', 'scan_ports', {'target': target, 'ports': ports},
+                        'Scanning ports...', f"Present this port scan result for {target} naturally. Show open ports clearly.")
+
+            # --- SSL CHECK ---
+            if not direct_mcp_action:
+                ssl_match = re.search(
+                    r'(?:v[eé]rifi[eé]?|check|test|analyse)\s*(?:le\s+)?(?:ssl|certificat|certificate|https)\s*(?:de|of|for|sur|on)?\s*(.+)',
+                    last_user_msg, re.IGNORECASE
+                )
+                if ssl_match:
+                    domain = ssl_match.group(1).strip().rstrip('.!?').replace('https://', '').replace('http://', '').split('/')[0]
+                    direct_mcp_action = ('security', 'check_ssl_security', {'domain': domain},
+                        'Checking SSL...', f"Present this SSL certificate analysis for {domain} naturally.")
+
+            # --- DOMAIN LOOKUP ---
+            if not direct_mcp_action:
+                domain_match = re.search(
+                    r'(?:whois|lookup|dns|info(?:rmation)?s?\s+(?:sur|on|about))\s+(.+)',
+                    last_user_msg, re.IGNORECASE
+                )
+                if domain_match:
+                    domain = domain_match.group(1).strip().rstrip('.!?').replace('https://', '').replace('http://', '').split('/')[0]
+                    direct_mcp_action = ('security', 'domain_lookup', {'domain': domain},
+                        'Looking up domain...', f"Present this domain lookup info for {domain} naturally.")
+
+            # --- EXECUTE PYTHON ---
+            if not direct_mcp_action:
+                code_match = re.search(
+                    r'(?:ex[eé]cute|run|lance|fais\s+tourner)\s*(?:ce\s+)?(?:code|python|script)\s*[:\s]*(?:```(?:python)?\s*)?(.+?)(?:```)?$',
+                    last_user_msg, re.IGNORECASE | re.DOTALL
+                )
+                if code_match:
+                    code = code_match.group(1).strip()
+                    direct_mcp_action = ('code_execution', 'execute_python', {'code': code},
+                        'Executing code...', "Present the code execution result naturally. Show the output clearly.")
+
+            # --- PASSWORD STRENGTH ---
+            if not direct_mcp_action:
+                pwd_match = re.search(
+                    r'(?:test[eé]?|v[eé]rifi[eé]?|check|analyse)\s*(?:la\s+)?(?:force|s[eé]curit[eé]|strength|security)\s*(?:du|de|of)?\s*(?:mot\s+de\s+passe|password|mdp)\s*[:\s]*["\']?(.+?)["\']?\s*$',
+                    last_user_msg, re.IGNORECASE
+                )
+                if pwd_match:
+                    password = pwd_match.group(1).strip()
+                    direct_mcp_action = ('security', 'password_strength_check', {'password': password},
+                        'Analyzing password...', "Present this password strength analysis naturally.")
+
+            # --- IP LOOKUP ---
+            if not direct_mcp_action:
+                ip_match = re.search(
+                    r'(?:ip|geoloca(?:lise|te)|localise|locate|info)\s*(?:de|of|for|sur|on)?\s*(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})',
+                    last_user_msg, re.IGNORECASE
+                )
+                if ip_match:
+                    ip = ip_match.group(1)
+                    direct_mcp_action = ('security', 'ip_intelligence', {'ip': ip},
+                        'Looking up IP...', f"Present this IP intelligence data for {ip} naturally.")
+
         direct_image_prompt = None
         if (image_trigger or implicit_image) and mcp_manager:
             # Extract image description from user message (strip the command part)
@@ -2467,6 +2618,83 @@ def chat():
                     yield f"data: {json.dumps({'clear_loading': True})}\n\n"
                     yield f"data: {json.dumps({'content': 'Something went wrong. Please try again.'})}\n\n"
                     print(f"[FAIL] Direct search exception: {e}", flush=True)
+
+                if db_pool and final_cleaned_response:
+                    try:
+                        conn = db_pool.getconn()
+                        cursor = conn.cursor()
+                        cursor.execute("INSERT INTO messages (session_id, role, content) VALUES (%s, 'assistant', %s)", (session_id, final_cleaned_response))
+                        conn.commit()
+                        db_pool.putconn(conn)
+                    except Exception:
+                        pass
+                yield "data: [DONE]\n\n"
+                return
+
+            # GENERIC DIRECT MCP ACTION BYPASS - Skip LLM for all detected tool intents
+            if direct_mcp_action and mcp_manager:
+                server_name, tool_name, tool_params, loading_msg, summary_prompt = direct_mcp_action
+                loading_html = f'<!--MCP_LOADING--><div class="mcp-loading">{loading_msg}</div><!--/MCP_LOADING-->'
+                yield f"data: {json.dumps({'content': loading_html})}\n\n"
+                try:
+                    mcp_server = mcp_manager.get_server(server_name)
+                    if mcp_server:
+                        print(f"[MCP-BYPASS] Direct {server_name}.{tool_name}: {tool_params}", flush=True)
+                        result = mcp_server.execute_tool(tool_name, **tool_params)
+                        yield f"data: {json.dumps({'clear_loading': True})}\n\n"
+
+                        result_data = result.get('result', {})
+                        handler_error = result_data.get('error') if isinstance(result_data, dict) else None
+
+                        if handler_error:
+                            safe_msg = _sanitize_error_for_user(handler_error)
+                            yield f"data: {json.dumps({'content': safe_msg})}\n\n"
+                            final_cleaned_response = safe_msg
+                        elif result.get('success') and result_data:
+                            # Special handling for TTS (audio_base64)
+                            if tool_name == 'text_to_speech' and isinstance(result_data, dict) and result_data.get('audio_base64'):
+                                audio_b64 = result_data['audio_base64']
+                                audio_fmt = result_data.get('format', 'mp3')
+                                audio_html = f'<audio controls autoplay><source src="data:audio/{audio_fmt};base64,{audio_b64}" type="audio/{audio_fmt}"></audio>'
+                                yield f"data: {json.dumps({'content': audio_html})}\n\n"
+                                final_cleaned_response = f"[Audio generated: {tool_params.get('text', '')[:100]}]"
+                            elif summary_prompt:
+                                # Send result to LLM for natural presentation
+                                results_text = json.dumps(result_data, indent=2, ensure_ascii=False, default=str)[:4000]
+                                summary_messages = [
+                                    {"role": "system", "content": f"You are Vif. {summary_prompt} Never write code. Be concise and useful."},
+                                    {"role": "user", "content": f"Tool result:\n{results_text}\n\nPresent this naturally."}
+                                ]
+                                try:
+                                    summary_stream = client_openrouter.chat.completions.create(
+                                        model="thedrummer/cydonia-24b-v4.1",
+                                        messages=summary_messages, max_tokens=2000, temperature=0.7, stream=True, timeout=60,
+                                        extra_headers={"HTTP-Referer": "https://vif.lat", "X-Title": "VIF AI"}
+                                    )
+                                    for chunk in summary_stream:
+                                        if chunk.choices and chunk.choices[0].delta.content:
+                                            c = _sanitize_identity(chunk.choices[0].delta.content)
+                                            yield f"data: {json.dumps({'content': c})}\n\n"
+                                            final_cleaned_response += c
+                                except Exception as llm_err:
+                                    # Fallback: show raw data
+                                    yield f"data: {json.dumps({'content': results_text[:2000]})}\n\n"
+                                    final_cleaned_response = results_text[:2000]
+                            else:
+                                # No summary needed, show raw result
+                                results_text = json.dumps(result_data, indent=2, ensure_ascii=False, default=str)[:2000]
+                                yield f"data: {json.dumps({'content': results_text})}\n\n"
+                                final_cleaned_response = results_text
+                            print(f"[OK] MCP-BYPASS {server_name}.{tool_name} -> {len(final_cleaned_response)} chars", flush=True)
+                        else:
+                            yield f"data: {json.dumps({'content': 'The tool returned no results. Please try again.'})}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'clear_loading': True})}\n\n"
+                        yield f"data: {json.dumps({'content': f'The {server_name} service is temporarily unavailable.'})}\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'clear_loading': True})}\n\n"
+                    yield f"data: {json.dumps({'content': 'Something went wrong. Please try again.'})}\n\n"
+                    print(f"[FAIL] MCP-BYPASS {server_name}.{tool_name} exception: {e}", flush=True)
 
                 if db_pool and final_cleaned_response:
                     try:
