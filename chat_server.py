@@ -342,6 +342,17 @@ def init_db():
     """Seed admin account if needed (schema already in PostgreSQL/Supabase)."""
     conn = get_db_connection()
     try:
+        # Create generated_images table for persistent image storage
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS generated_images (
+                filename TEXT PRIMARY KEY,
+                image_data BYTEA NOT NULL,
+                mime_type TEXT NOT NULL DEFAULT 'image/jpeg',
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        conn.commit()
+
         admin_username = os.getenv('ADMIN_USERNAME', 'Admin')
         admin_password = os.getenv('ACCESS_PASSWORD', 'admin123')
         existing = conn.execute("SELECT 1 FROM users WHERE username = %s", (admin_username,)).fetchone()
@@ -358,6 +369,36 @@ def init_db():
         print(f"Init DB error: {e}")
     finally:
         conn.close()
+
+def save_image_to_db(filename: str, image_data: bytes, mime_type: str = 'image/jpeg'):
+    """Save generated image to database for persistence across deploys"""
+    try:
+        if not db_pool:
+            return
+        with get_db_connection() as conn:
+            conn.execute(
+                "INSERT INTO generated_images (filename, image_data, mime_type) VALUES (%s, %s, %s) ON CONFLICT (filename) DO UPDATE SET image_data = EXCLUDED.image_data",
+                (filename, psycopg2.Binary(image_data), mime_type)
+            )
+            conn.commit()
+    except Exception as e:
+        print(f"Error saving image to DB: {e}")
+
+def load_image_from_db(filename: str):
+    """Load image from database, returns (image_data, mime_type) or (None, None)"""
+    try:
+        if not db_pool:
+            return None, None
+        with get_db_connection() as conn:
+            row = conn.execute(
+                "SELECT image_data, mime_type FROM generated_images WHERE filename = %s",
+                (filename,)
+            ).fetchone()
+            if row:
+                return bytes(row[0]), row[1]
+    except Exception as e:
+        print(f"Error loading image from DB: {e}")
+    return None, None
 
 # Initialize database pool with error handling
 print("🔄 Initializing Vif Chat Server...", flush=True)
@@ -1237,19 +1278,37 @@ def debug_page():
 @app.route('/api/mcp/images/<filename>')
 @login_required
 def serve_mcp_image(filename):
-    """Serve generated images from MCP creative workspace"""
+    """Serve generated images - try filesystem first, then database"""
     safe_name = secure_filename(filename)
     if not safe_name:
         return "Invalid filename", 400
+
+    # Try filesystem first (fast, works during same deploy)
     creative_dir = "/tmp/vif_creative"
     file_path = os.path.join(creative_dir, safe_name)
-    if not os.path.isfile(file_path):
-        return "Image not found", 404
-    ext = os.path.splitext(safe_name)[1].lower()
-    mime = 'image/jpeg' if ext in ('.jpg', '.jpeg') else 'image/png'
-    resp = make_response(send_from_directory(creative_dir, safe_name, mimetype=mime))
-    resp.headers['Cache-Control'] = 'public, max-age=86400'
-    return resp
+    if os.path.isfile(file_path):
+        ext = os.path.splitext(safe_name)[1].lower()
+        mime = 'image/jpeg' if ext in ('.jpg', '.jpeg') else 'image/png'
+        resp = make_response(send_from_directory(creative_dir, safe_name, mimetype=mime))
+        resp.headers['Cache-Control'] = 'public, max-age=86400'
+        return resp
+
+    # Fallback: load from database (survives redeploys)
+    image_data, mime_type = load_image_from_db(safe_name)
+    if image_data:
+        # Also restore to filesystem for faster subsequent access
+        try:
+            os.makedirs(creative_dir, exist_ok=True)
+            with open(file_path, 'wb') as f:
+                f.write(image_data)
+        except Exception:
+            pass
+        resp = make_response(image_data)
+        resp.headers['Content-Type'] = mime_type
+        resp.headers['Cache-Control'] = 'public, max-age=86400'
+        return resp
+
+    return "Image not found", 404
 
 
 @app.route('/api/mcp/audio/<filename>')
@@ -1898,6 +1957,15 @@ def chat():
                                 img_md = f"\n\n![Image]({image_url})\n\n"
                                 yield f"data: {json.dumps({'content': img_md})}\n\n"
                                 final_cleaned_response = img_md
+                            # Persist image to DB for survival across deploys
+                            if filename and result_data.get('image_base64'):
+                                try:
+                                    img_bytes = base64.b64decode(result_data['image_base64'])
+                                    ext = os.path.splitext(filename)[1].lower()
+                                    mime = 'image/jpeg' if ext in ('.jpg', '.jpeg') else 'image/png'
+                                    save_image_to_db(filename, img_bytes, mime)
+                                except Exception as db_err:
+                                    print(f"[WARN] Could not persist image to DB: {db_err}")
                             size_kb = result_data.get('file_size_kb', '?')
                             yield f"data: {json.dumps({'content': f'*Image generated ({size_kb} KB)*'})}\n\n"
                             print(f"[OK] Direct image gen: {direct_image_prompt[:50]}... -> {image_url}", flush=True)
@@ -2076,6 +2144,16 @@ def chat():
                                     yield f"data: {json.dumps({'content': img_md})}\n\n"
                                     cleaned_response_chunk += img_md
                                     final_cleaned_response += img_md
+
+                                # Persist image to DB
+                                if filename and result_data.get('image_base64'):
+                                    try:
+                                        img_bytes = base64.b64decode(result_data['image_base64'])
+                                        ext = os.path.splitext(filename)[1].lower()
+                                        mime = 'image/jpeg' if ext in ('.jpg', '.jpeg') else 'image/png'
+                                        save_image_to_db(filename, img_bytes, mime)
+                                    except Exception as db_err:
+                                        print(f"[WARN] Could not persist image to DB: {db_err}")
 
                                 # Clean result for LLM context (no base64, no internal details)
                                 agent_output += f"\n\nImage generated successfully and displayed to the user.\n"
