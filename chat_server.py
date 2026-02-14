@@ -1845,7 +1845,8 @@ def chat():
 
             # DIRECT IMAGE GENERATION BYPASS - Skip LLM entirely
             if direct_image_prompt and mcp_manager:
-                yield f"data: {json.dumps({'content': '<!--MCP_LOADING--><div class=\"mcp-loading\">Generating image...</div><!--/MCP_LOADING-->'})}\n\n"
+                loading_html = '<!--MCP_LOADING--><div class="mcp-loading">Generating image...</div><!--/MCP_LOADING-->'
+                yield f"data: {json.dumps({'content': loading_html})}\n\n"
                 try:
                     creative_server = mcp_manager.get_server('creative')
                     if creative_server:
