@@ -34,7 +34,7 @@ class CreativeMCP(MCPServer):
         # Tool 1: Generate image
         self.register_tool(MCPTool(
             name="generate_image",
-            description="Generate image from text prompt using Higgsfield AI (Soul model)",
+            description="Generate image from text prompt using Higgsfield AI (FLUX Pro)",
             parameters={
                 "type": "object",
                 "properties": {
@@ -42,17 +42,11 @@ class CreativeMCP(MCPServer):
                         "type": "string",
                         "description": "Text description of image to generate"
                     },
-                    "quality": {
+                    "aspect_ratio": {
                         "type": "string",
-                        "description": "Image quality: 720p or 1080p",
-                        "enum": ["720p", "1080p"],
-                        "default": "720p"
-                    },
-                    "size": {
-                        "type": "string",
-                        "description": "Image dimensions",
-                        "enum": ["1536x1536", "2048x1152", "1152x2048", "2048x1536", "1536x2048"],
-                        "default": "1536x1536"
+                        "description": "Image aspect ratio",
+                        "enum": ["1:1", "16:9", "9:16", "4:3", "3:4"],
+                        "default": "1:1"
                     }
                 },
                 "required": ["prompt"]
@@ -188,32 +182,27 @@ class CreativeMCP(MCPServer):
             handler=self._speech_to_text
         ))
 
-    def _generate_image(self, prompt: str, quality: str = "720p",
-                       size: str = "1536x1536") -> Dict[str, Any]:
-        """Generate image using Higgsfield AI (Soul model)"""
+    def _generate_image(self, prompt: str, aspect_ratio: str = "1:1", **kwargs) -> Dict[str, Any]:
+        """Generate image using Higgsfield AI V2 API (FLUX Pro)"""
         try:
             if not self.higgsfield_api_key or not self.higgsfield_secret:
                 return {"error": "HIGGSFIELD_API_KEY/HIGGSFIELD_SECRET not configured."}
 
+            auth = f"{self.higgsfield_api_key}:{self.higgsfield_secret}"
             headers = {
-                "hf-api-key": self.higgsfield_api_key,
-                "hf-secret": self.higgsfield_secret,
+                "Authorization": f"Key {auth}",
                 "Content-Type": "application/json",
                 "Accept": "application/json"
             }
 
-            # Submit image generation job
+            # Submit image generation job (V2 API)
             payload = {
-                "params": {
-                    "prompt": prompt,
-                    "width_and_height": size,
-                    "enhance_prompt": True,
-                    "quality": quality,
-                    "batch_size": 1
-                }
+                "prompt": prompt,
+                "aspect_ratio": aspect_ratio,
+                "safety_tolerance": 2
             }
 
-            api_url = f"{self.higgsfield_base_url}/v1/text2image/soul"
+            api_url = f"{self.higgsfield_base_url}/flux-pro/kontext/max/text-to-image"
             response = requests.post(api_url, headers=headers, json=payload, timeout=30)
 
             if response.status_code != 200:
@@ -221,41 +210,30 @@ class CreativeMCP(MCPServer):
                 return {"error": f"Higgsfield API error ({response.status_code}): {error_msg}"}
 
             job_data = response.json()
-            job_set_id = job_data.get("id")
-            if not job_set_id:
-                return {"error": f"No job ID in response: {str(job_data)[:200]}"}
+            request_id = job_data.get("request_id")
+            status_url = job_data.get("status_url")
+            if not request_id or not status_url:
+                return {"error": f"No request_id in response: {str(job_data)[:200]}"}
 
             # Poll for results (max 90s to stay under gunicorn 120s timeout)
-            poll_url = f"{self.higgsfield_base_url}/v1/job-sets/{job_set_id}"
             max_polls = 30
             poll_interval = 3
 
             for _ in range(max_polls):
                 time.sleep(poll_interval)
-                poll_response = requests.get(poll_url, headers=headers, timeout=15)
+                poll_response = requests.get(status_url, headers=headers, timeout=15)
                 if poll_response.status_code != 200:
                     continue
 
                 poll_data = poll_response.json()
-                jobs = poll_data.get("jobs", [])
-
-                if not jobs:
-                    continue
-
-                job = jobs[0]
-                status = job.get("status", "")
+                status = poll_data.get("status", "")
 
                 if status == "completed":
-                    results = job.get("results", {})
-                    # Get preview URL (faster) or full quality
-                    image_url = None
-                    if results.get("min", {}).get("url"):
-                        image_url = results["min"]["url"]
-                    elif results.get("raw", {}).get("url"):
-                        image_url = results["raw"]["url"]
-
-                    if not image_url:
+                    images = poll_data.get("images", [])
+                    if not images or not images[0].get("url"):
                         return {"error": "Job completed but no image URL in results"}
+
+                    image_url = images[0]["url"]
 
                     # Download the image
                     img_response = requests.get(image_url, timeout=30)
@@ -287,15 +265,15 @@ class CreativeMCP(MCPServer):
                     return {
                         "success": True,
                         "prompt": prompt,
-                        "model": "higgsfield-soul",
-                        "size": size,
+                        "model": "flux-pro-kontext-max",
+                        "aspect_ratio": aspect_ratio,
                         "local_path": save_path,
                         "image_base64": image_b64,
                         "file_size_kb": round(len(image_data) / 1024, 1)
                     }
 
                 elif status == "failed":
-                    return {"error": f"Image generation failed: {job.get('error', 'unknown error')}"}
+                    return {"error": "Image generation failed"}
                 elif status == "nsfw":
                     return {"error": "Image generation blocked: content flagged as NSFW"}
 
