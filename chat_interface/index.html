@@ -1584,6 +1584,7 @@
 
         async function createNewSession() {
             stopAudio(); // Stop audio on new session
+            clearFileStatus();
             try {
                 const response = await fetch('/api/sessions', { method: 'POST' });
                 const data = await response.json();
@@ -1626,6 +1627,7 @@
 
         async function loadSession(id) {
             try {
+                clearFileStatus();
                 currentSessionId = id;
                 const response = await fetch(`/api/sessions/${id}`);
                 const msgs = await response.json();
