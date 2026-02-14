@@ -2033,7 +2033,11 @@ def chat():
 
             import re
             TAG_REGEX = re.compile(r'^\s*\[(BROWSE|CLICK|TYPE|PRESS|READ|SCREENSHOT)(\s*[:\]])', re.IGNORECASE)
-            EXEC_REGEX = re.compile(r'\[\s*(BROWSE|CLICK|TYPE|PRESS|READ|SCREENSHOT)\s*(?::\s*(.*?))?\s*\]', re.IGNORECASE)
+            # Strict regex: BROWSE/CLICK/TYPE/PRESS require colon+param, READ/SCREENSHOT standalone only
+            # Negative lookahead (?!\() prevents matching markdown links like [Read](url)
+            EXEC_REGEX = re.compile(r'\[\s*(BROWSE|CLICK|TYPE|PRESS)\s*:\s*(.+?)\s*\](?!\()|\[\s*(READ|SCREENSHOT)\s*\](?!\()', re.IGNORECASE)
+            # Strict MCP JSON detection (must look like actual JSON, not just contain the word)
+            MCP_JSON_PATTERN = re.compile(r'\{\s*"mcp_call"\s*:\s*true\s*,', re.IGNORECASE)
 
             for turn in range(MAX_TURNS):
                 full_response_for_execution = ""
@@ -2084,14 +2088,14 @@ def chat():
                             if not streaming_started:
                                 initial_buffer += c
                                 if len(initial_buffer) >= BUFFER_SIZE:
-                                    if EXEC_REGEX.search(initial_buffer) or (mcp_manager and ('"mcp_call"' in initial_buffer)):
+                                    if EXEC_REGEX.search(initial_buffer) or (mcp_manager and MCP_JSON_PATTERN.search(initial_buffer)):
                                         is_action_turn = True
                                     else:
                                         streaming_started = True
                                         yield f"data: {json.dumps({'content': initial_buffer})}\n\n"
                             elif not is_action_turn:
                                 # Check if MCP JSON appeared mid-stream - stop streaming immediately
-                                if mcp_manager and '"mcp_call"' in current_turn_text:
+                                if mcp_manager and MCP_JSON_PATTERN.search(current_turn_text):
                                     is_action_turn = True
                                 else:
                                     yield f"data: {json.dumps({'content': c})}\n\n"
@@ -2124,13 +2128,17 @@ def chat():
 
                 if EXEC_REGEX.search(full_response_for_execution):
                     has_actions = True
-                if mcp_manager and ('mcp_call' in full_response_for_execution or '"mcp_call"' in full_response_for_execution):
+                if mcp_manager and MCP_JSON_PATTERN.search(full_response_for_execution):
                     has_mcp_call = True
                     has_actions = True
 
                 if not has_actions:
                     cleaned_response_chunk += current_turn_text
                     final_cleaned_response += current_turn_text
+                elif streaming_started and not is_action_turn:
+                    # Content was already streamed to user - save it even if post-check found actions
+                    final_cleaned_response += current_turn_text
+                    print(f"🤖 Action detected post-stream, but content was shown: {current_turn_text[:50]}...")
                 else:
                     print(f"🤖 Agent Thought (Hidden): {current_turn_text[:50]}...")
 
@@ -2240,8 +2248,8 @@ def chat():
                          for line in lines:
                             match = EXEC_REGEX.search(line)
                             if match:
-                                action = match.group(1).upper()
-                                param = match.group(2).strip() if match.group(2) else ""
+                                action = (match.group(1) or match.group(3)).upper()
+                                param = (match.group(2) or "").strip()
                                 
                                 res = "Done"
                                 try:
