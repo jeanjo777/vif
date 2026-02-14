@@ -1862,7 +1862,8 @@ def chat():
                     error_msg = stream_error or "Model returned empty response"
                     print(f"Empty/error response on turn {turn+1}: {error_msg}", flush=True)
                     if turn == MAX_TURNS - 1 or not stream_error:
-                        yield f"data: {json.dumps({'content': '\\n\\n*[Connection lost - please resend your message]*'})}\n\n"
+                        retry_msg = "\n\n*[Connection lost - please resend your message]*"
+                        yield f"data: {json.dumps({'content': retry_msg})}\n\n"
                     break
 
                 has_actions = is_action_turn
