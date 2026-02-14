@@ -1779,12 +1779,9 @@ def chat():
                 buffer = ""
                 response_stream = None
                 
-                # UNCENSORED MODELS VIA OPENROUTER (ordered by preference)
+                # PRIMARY MODEL: Cydonia 24B v4.1 (uncensored, 131K context)
                 models = [
                     "thedrummer/cydonia-24b-v4.1",
-                    "nousresearch/hermes-3-llama-3.1-405b:free",
-                    "meta-llama/llama-3.1-8b-instruct:free",
-                    "venice/uncensored:free",
                 ]
 
                 current_turn_text = ""
