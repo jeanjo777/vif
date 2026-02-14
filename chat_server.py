@@ -703,8 +703,8 @@ def admin_toggle_premium(target_user):
         if new_status:
             expiry = datetime.datetime.now() + datetime.timedelta(days=30)
             conn.execute('UPDATE users SET has_paid = TRUE, subscription_expiry = %s WHERE username = %s', (expiry, target_user))
-            conn.execute('INSERT INTO payments (username, amount, tx_id, date, method) VALUES (%s, %s, %s, %s, %s)',
-                         (target_user, 0.00, f"MANUAL_{int(datetime.datetime.now().timestamp())}", datetime.datetime.now(), 'ADMIN_GRANT'))
+            conn.execute('INSERT INTO payments (username, amount, currency, status, stripe_session_id, created_at) VALUES (%s, %s, %s, %s, %s, %s)',
+                         (target_user, 0.00, 'USD', 'admin_grant', f"MANUAL_{int(datetime.datetime.now().timestamp())}", datetime.datetime.now()))
         else:
             conn.execute('UPDATE users SET has_paid = FALSE, subscription_expiry = NULL WHERE username = %s', (target_user,))
 
@@ -720,36 +720,22 @@ def admin_delete_user(target_user):
         return jsonify({'error': 'Unauthorized'}), 403
         
     if target_user == admin_user:
-         return jsonify({'error': 'Cannot suicide admin account'}), 400
+         return jsonify({'error': 'Cannot delete admin account'}), 400
 
-    conn = get_db_connection()
     try:
-        # 1. Get Session IDs for cleanup
-        sessions = conn.execute('SELECT id FROM sessions WHERE username = %s', (target_user,)).fetchall()
-        session_ids = [s['id'] for s in sessions]
-        
-        # 2. Delete Messages in those sessions
-        if session_ids:
-            # placeholders = ',' .join('?' for _ in session_ids) # SQLite limitation safeguard?
-            # Safe way: Iterate or batch. For simplicity in this scale:
-            for sid in session_ids:
-                conn.execute('DELETE FROM messages WHERE session_id = %s', (sid,))
-        
-        # 3. Delete Sessions
-        conn.execute('DELETE FROM sessions WHERE username = %s', (target_user,))
-        
-        # 4. Delete User
-        conn.execute('DELETE FROM users WHERE username = %s', (target_user,))
-        
-        conn.commit()
-        log_system_event('WARN', f"Admin TERMINATED agent: {target_user}")
+        with get_db_connection() as conn:
+            sessions = conn.execute('SELECT id FROM sessions WHERE username = %s', (target_user,)).fetchall()
+            for s in sessions:
+                conn.execute('DELETE FROM messages WHERE session_id = %s', (s['id'],))
+            conn.execute('DELETE FROM sessions WHERE username = %s', (target_user,))
+            conn.execute('DELETE FROM payments WHERE username = %s', (target_user,))
+            conn.execute('DELETE FROM users WHERE username = %s', (target_user,))
+            conn.commit()
+        log_system_event('WARN', f"Admin deleted user: {target_user}")
         return jsonify({'success': True})
     except Exception as e:
-        conn.rollback()
         log_system_event('ERROR', f"Failed to delete user {target_user}: {e}")
         return jsonify({'error': str(e)}), 500
-    finally:
-        conn.close()
 
 @app.route('/api/admin/users/<target_user>/chat_history')
 @login_required
