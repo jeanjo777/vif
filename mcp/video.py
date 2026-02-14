@@ -227,34 +227,30 @@ class VideoMCP(MCPServer):
             handler=self._video_info
         ))
 
+    def _safe_parse_fps(self, fps_str: str) -> float:
+        """Safely parse FFprobe frame rate string (e.g., '30000/1001') without eval()"""
+        try:
+            if '/' in fps_str:
+                num, den = fps_str.split('/', 1)
+                num, den = float(num), float(den)
+                return round(num / den, 2) if den != 0 else 0
+            return float(fps_str)
+        except (ValueError, ZeroDivisionError):
+            return 0
+
     def _generate_video(self, prompt: str, duration: int = 4, fps: int = 24,
                        resolution: str = "720p", style: str = "realistic") -> Dict[str, Any]:
-        """Generate video from text using AI"""
-        try:
-            # Note: This would use actual video generation APIs in production
-            # For now, we'll create a placeholder that explains the capability
-
-            import requests
-
-            # In production, this would call Runway, Pika Labs, or Stability AI video API
-            # Example placeholder response
-            result = {
-                "success": True,
-                "prompt": prompt,
-                "duration": duration,
-                "fps": fps,
-                "resolution": resolution,
-                "style": style,
-                "status": "Video generation would be processed via API",
-                "note": "Requires API integration with Runway ML, Pika Labs, or Stability AI",
-                "estimated_cost": "$0.05-0.20 per second of video",
-                "alternative": "Use images_to_video with AI-generated images for now"
-            }
-
-            return result
-
-        except Exception as e:
-            return {"error": str(e)}
+        """Generate video from text - not available without dedicated video API"""
+        return {
+            "success": False,
+            "error": "Video generation is not available",
+            "reason": "No video generation API is configured (Runway ML, Pika Labs, etc.)",
+            "prompt": prompt,
+            "alternatives": [
+                "Use 'generate_image' from the creative server to create individual frames",
+                "Use 'images_to_video' to combine generated images into a video"
+            ]
+        }
 
     def _images_to_video(self, image_paths: List[str] = None, image_urls: List[str] = None,
                         fps: int = 30, transition: str = "fade",
@@ -554,7 +550,7 @@ class VideoMCP(MCPServer):
                     "codec": video_stream.get('codec_name'),
                     "width": video_stream.get('width'),
                     "height": video_stream.get('height'),
-                    "fps": eval(video_stream.get('r_frame_rate', '0/1')),
+                    "fps": self._safe_parse_fps(video_stream.get('r_frame_rate', '0/1')),
                     "bitrate": video_stream.get('bit_rate')
                 },
                 "audio": {

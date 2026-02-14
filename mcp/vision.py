@@ -171,6 +171,9 @@ class VisionMCP(MCPServer):
     def _call_vision_api(self, image_base64: str, prompt: str) -> str:
         """Call OpenRouter/OpenAI vision API"""
         try:
+            if not self.openai_api_key:
+                return "Error: OPENROUTER_API_KEY not configured. Vision analysis requires an API key."
+
             url = "https://openrouter.ai/api/v1/chat/completions"
 
             headers = {
@@ -318,6 +321,9 @@ class VisionMCP(MCPServer):
             }
 
             prompt = prompts.get(diagram_type, prompts["mermaid"])
+
+            if not self.openai_api_key:
+                return {"error": "OPENROUTER_API_KEY not configured. Diagram generation requires an API key."}
 
             # Use OpenRouter to generate diagram code
             url = "https://openrouter.ai/api/v1/chat/completions"

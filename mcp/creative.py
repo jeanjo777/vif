@@ -178,6 +178,9 @@ class CreativeMCP(MCPServer):
                        style: str = "vivid") -> Dict[str, Any]:
         """Generate image from text"""
         try:
+            if not self.openrouter_key:
+                return {"error": "OPENROUTER_API_KEY not configured. Image generation requires an API key."}
+
             # Use OpenRouter for image generation
             url = "https://openrouter.ai/api/v1/images/generations"
 
@@ -309,6 +312,9 @@ class CreativeMCP(MCPServer):
                        format: str = "mp3") -> Dict[str, Any]:
         """Convert text to speech"""
         try:
+            if not self.openrouter_key:
+                return {"error": "OPENROUTER_API_KEY not configured. Text-to-speech requires an API key."}
+
             # Use OpenRouter/OpenAI TTS
             url = "https://openrouter.ai/api/v1/audio/speech"
 
@@ -354,6 +360,9 @@ class CreativeMCP(MCPServer):
                        response_format: str = "text") -> Dict[str, Any]:
         """Transcribe audio to text"""
         try:
+            if not self.openrouter_key:
+                return {"error": "OPENROUTER_API_KEY not configured. Speech-to-text requires an API key."}
+
             # Load audio
             if audio_url:
                 response = requests.get(audio_url, timeout=30)

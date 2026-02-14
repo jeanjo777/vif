@@ -674,12 +674,54 @@ class SecurityMCP(MCPServer):
             return {"error": str(e)}
 
     def _analyze_file_hash(self, hash: str, hash_type: str = "sha256") -> Dict[str, Any]:
-        """Analyze file hash"""
-        return {
-            "hash": hash,
-            "hash_type": hash_type,
-            "note": "Use scan_file_virustotal for comprehensive analysis"
-        }
+        """Analyze file hash using VirusTotal or MalwareBazaar"""
+        try:
+            # Try VirusTotal first
+            if self.virustotal_key:
+                headers = {"x-apikey": self.virustotal_key}
+                vt_url = f"https://www.virustotal.com/api/v3/files/{hash}"
+                response = requests.get(vt_url, headers=headers, timeout=15)
+                if response.status_code == 200:
+                    data = response.json()
+                    attrs = data.get('data', {}).get('attributes', {})
+                    stats = attrs.get('last_analysis_stats', {})
+                    return {
+                        "hash": hash,
+                        "hash_type": hash_type,
+                        "source": "VirusTotal",
+                        "malicious": stats.get('malicious', 0),
+                        "suspicious": stats.get('suspicious', 0),
+                        "undetected": stats.get('undetected', 0),
+                        "total_engines": sum(stats.values()) if stats else 0,
+                        "verdict": "MALICIOUS" if stats.get('malicious', 0) > 0 else "CLEAN",
+                        "file_type": attrs.get('type_description', 'Unknown'),
+                        "file_name": attrs.get('meaningful_name', 'Unknown')
+                    }
+                elif response.status_code == 404:
+                    return {"hash": hash, "hash_type": hash_type, "verdict": "NOT FOUND", "source": "VirusTotal"}
+
+            # Fallback: Try MalwareBazaar (free, no API key)
+            mb_url = "https://mb-api.abuse.ch/api/v1/"
+            response = requests.post(mb_url, data={"query": "get_info", "hash": hash}, timeout=10)
+            data = response.json()
+            if data.get('query_status') == 'ok' and data.get('data'):
+                sample = data['data'][0]
+                return {
+                    "hash": hash,
+                    "hash_type": hash_type,
+                    "source": "MalwareBazaar",
+                    "verdict": "MALICIOUS",
+                    "file_type": sample.get('file_type', 'Unknown'),
+                    "signature": sample.get('signature'),
+                    "first_seen": sample.get('first_seen'),
+                    "tags": sample.get('tags', [])
+                }
+            elif data.get('query_status') == 'hash_not_found':
+                return {"hash": hash, "hash_type": hash_type, "verdict": "NOT FOUND", "source": "MalwareBazaar"}
+
+            return {"hash": hash, "hash_type": hash_type, "verdict": "UNKNOWN", "note": "No results from available databases"}
+        except Exception as e:
+            return {"error": str(e)}
 
     def _hash_generate(self, data: str, algorithms: List[str] = None) -> Dict[str, Any]:
         """Generate hashes"""
@@ -861,35 +903,196 @@ class SecurityMCP(MCPServer):
             return {"error": str(e)}
 
     def _sql_injection_test(self, url: str, parameter: str = None) -> Dict[str, Any]:
-        """Test for SQL injection (safe payloads only)"""
-        return {
-            "warning": "SQL injection testing requires authorization",
-            "url": url,
-            "note": "Use professional tools like sqlmap for comprehensive testing",
-            "ethical_reminder": "Only test systems you own or have permission to test"
-        }
+        """Test for SQL injection using safe error-based detection (authorized targets only)"""
+        try:
+            findings = []
+            # Safe test payloads that only detect error messages, don't extract data
+            test_payloads = [
+                ("'", "single_quote"),
+                ("1' OR '1'='1", "boolean_or"),
+                ("1; SELECT 1--", "stacked_query"),
+                ("1' AND 1=CONVERT(int, 'a')--", "type_conversion"),
+            ]
+            sql_error_patterns = [
+                "sql syntax", "mysql", "sqlite", "postgresql", "oracle",
+                "syntax error", "unclosed quotation", "unterminated string",
+                "odbc", "microsoft ole db", "invalid query",
+                "you have an error in your sql", "quoted string not properly terminated"
+            ]
+
+            separator = "&" if "?" in url else "?"
+            test_param = parameter or "id"
+
+            for payload, payload_name in test_payloads:
+                try:
+                    test_url = f"{url}{separator}{test_param}={payload}"
+                    response = requests.get(test_url, timeout=5, allow_redirects=False)
+                    body_lower = response.text.lower()
+                    matched = [p for p in sql_error_patterns if p in body_lower]
+                    if matched:
+                        findings.append({
+                            "payload": payload_name,
+                            "indicators": matched[:3],
+                            "status_code": response.status_code,
+                            "severity": "high"
+                        })
+                except requests.RequestException:
+                    continue
+
+            vulnerable = len(findings) > 0
+            return {
+                "url": url,
+                "parameter_tested": test_param,
+                "vulnerable": vulnerable,
+                "findings": findings,
+                "severity": "HIGH" if vulnerable else "NONE",
+                "recommendation": "Parameterized queries required" if vulnerable else "No SQL injection detected with basic tests",
+                "disclaimer": "This is a basic test. Use sqlmap for comprehensive assessment."
+            }
+        except Exception as e:
+            return {"error": str(e)}
 
     def _xss_test(self, url: str, payload_type: str = "reflected") -> Dict[str, Any]:
-        """Test for XSS (basic detection only)"""
-        return {
-            "warning": "XSS testing requires authorization",
-            "url": url,
-            "note": "Use professional scanners for comprehensive XSS testing",
-            "ethical_reminder": "Only test systems you own or have permission to test"
-        }
+        """Test for reflected XSS using harmless payloads (authorized targets only)"""
+        try:
+            findings = []
+            # Harmless payloads that test for reflection without executing anything malicious
+            test_payloads = [
+                ("<viftest>", "html_tag_reflection"),
+                ("'\"><viftest>", "quote_break_reflection"),
+                ("javascript:viftest", "javascript_protocol"),
+                ("<img src=x onerror=viftest>", "event_handler"),
+                ("<svg onload=viftest>", "svg_event"),
+            ]
+
+            separator = "&" if "?" in url else "?"
+            test_params = ["q", "search", "query", "input", "s", "name"]
+
+            for param in test_params:
+                for payload, payload_name in test_payloads:
+                    try:
+                        test_url = f"{url}{separator}{param}={payload}"
+                        response = requests.get(test_url, timeout=5, allow_redirects=False)
+                        # Check if the payload is reflected in the response without encoding
+                        if payload in response.text:
+                            findings.append({
+                                "parameter": param,
+                                "payload_type": payload_name,
+                                "reflected": True,
+                                "encoded": False,
+                                "severity": "high"
+                            })
+                            break  # One finding per param is enough
+                        # Check if HTML-encoded (means they sanitize but good to note)
+                        import html
+                        encoded_payload = html.escape(payload)
+                        if encoded_payload in response.text and encoded_payload != payload:
+                            findings.append({
+                                "parameter": param,
+                                "payload_type": payload_name,
+                                "reflected": True,
+                                "encoded": True,
+                                "severity": "low"
+                            })
+                            break
+                    except requests.RequestException:
+                        continue
+
+            vulnerable = any(f.get("encoded") is False for f in findings)
+            return {
+                "url": url,
+                "test_type": payload_type,
+                "vulnerable": vulnerable,
+                "findings": findings,
+                "severity": "HIGH" if vulnerable else "LOW" if findings else "NONE",
+                "recommendation": "Implement output encoding and CSP headers" if vulnerable else "No reflected XSS detected with basic tests",
+                "disclaimer": "This is a basic test. Use Burp Suite or OWASP ZAP for comprehensive assessment."
+            }
+        except Exception as e:
+            return {"error": str(e)}
 
     def _check_ip_reputation(self, ip: str) -> Dict[str, Any]:
-        """Check IP reputation"""
+        """Check IP reputation using multiple free sources"""
         try:
-            # Use AbuseIPDB API (free tier available)
-            url = f"https://api.abuseipdb.com/api/v2/check?ipAddress={ip}"
+            result = {"ip": ip, "checks": {}}
 
-            # Note: Requires API key for full functionality
-            return {
-                "ip": ip,
-                "note": "Configure ABUSEIPDB_API_KEY for full reputation checking",
-                "alternative": "Check manually at https://www.abuseipdb.com"
+            # 1. IP geolocation and basic info via ip-api.com (free)
+            try:
+                geo_resp = requests.get(f"http://ip-api.com/json/{ip}", timeout=5)
+                if geo_resp.status_code == 200:
+                    geo = geo_resp.json()
+                    if geo.get('status') == 'success':
+                        result["geo"] = {
+                            "country": geo.get('country'),
+                            "city": geo.get('city'),
+                            "isp": geo.get('isp'),
+                            "org": geo.get('org')
+                        }
+            except requests.RequestException:
+                pass
+
+            # 2. Check AbuseIPDB if key available
+            abuseipdb_key = os.getenv('ABUSEIPDB_API_KEY')
+            if abuseipdb_key:
+                try:
+                    headers = {"Key": abuseipdb_key, "Accept": "application/json"}
+                    abuse_resp = requests.get(
+                        f"https://api.abuseipdb.com/api/v2/check?ipAddress={ip}&maxAgeInDays=90",
+                        headers=headers, timeout=10
+                    )
+                    if abuse_resp.status_code == 200:
+                        abuse_data = abuse_resp.json().get('data', {})
+                        result["checks"]["abuseipdb"] = {
+                            "abuse_score": abuse_data.get('abuseConfidenceScore', 0),
+                            "total_reports": abuse_data.get('totalReports', 0),
+                            "is_public": abuse_data.get('isPublic'),
+                            "usage_type": abuse_data.get('usageType'),
+                            "domain": abuse_data.get('domain')
+                        }
+                except requests.RequestException:
+                    pass
+
+            # 3. Basic reverse DNS check
+            try:
+                hostname = socket.gethostbyaddr(ip)
+                result["reverse_dns"] = hostname[0]
+            except (socket.herror, socket.gaierror):
+                result["reverse_dns"] = None
+
+            # 4. Check common blacklists via DNS-based blackhole lists (DNSBL)
+            blacklists_checked = 0
+            blacklists_listed = []
+            dnsbls = [
+                ("zen.spamhaus.org", "Spamhaus"),
+                ("bl.spamcop.net", "SpamCop"),
+                ("dnsbl.sorbs.net", "SORBS"),
+            ]
+            reversed_ip = '.'.join(reversed(ip.split('.')))
+            for dnsbl, name in dnsbls:
+                try:
+                    socket.gethostbyname(f"{reversed_ip}.{dnsbl}")
+                    blacklists_listed.append(name)
+                except socket.gaierror:
+                    pass
+                blacklists_checked += 1
+
+            result["checks"]["dnsbl"] = {
+                "checked": blacklists_checked,
+                "listed_on": blacklists_listed,
+                "blacklisted": len(blacklists_listed) > 0
             }
+
+            # Overall reputation
+            abuse_score = result.get("checks", {}).get("abuseipdb", {}).get("abuse_score", 0)
+            bl_count = len(blacklists_listed)
+            if abuse_score > 50 or bl_count >= 2:
+                result["reputation"] = "BAD"
+            elif abuse_score > 10 or bl_count >= 1:
+                result["reputation"] = "SUSPICIOUS"
+            else:
+                result["reputation"] = "CLEAN"
+
+            return result
 
         except Exception as e:
             return {"error": str(e)}
