@@ -1808,9 +1808,8 @@ def chat():
 
         # Use specialized system prompt based on selected model
         model_prompt = get_system_prompt(selected_model)
-        messages = [{"role": "system", "content": model_prompt}] + final_conversation
 
-        # Detect image generation requests and inject tool reminder
+        # Detect image generation requests and inject tool reminder into system prompt
         import re
         last_user_msg = user_message.lower()
         image_trigger = bool(re.search(
@@ -1822,10 +1821,9 @@ def chat():
             last_user_msg, re.IGNORECASE
         ))
         if image_trigger:
-            messages.append({
-                "role": "system",
-                "content": 'INSTRUCTION: The user wants an image generated. You MUST respond with ONLY this JSON (replace PROMPT with enhanced description):\n{"mcp_call":true,"server":"creative","tool":"generate_image","parameters":{"prompt":"PROMPT"}}\nDo NOT say you cannot generate images. Do NOT suggest alternatives. Output ONLY the JSON.'
-            })
+            model_prompt += '\n\n[ACTIVE INSTRUCTION] The user wants an image generated. You MUST respond with ONLY this JSON (replace PROMPT with enhanced description):\n{"mcp_call":true,"server":"creative","tool":"generate_image","parameters":{"prompt":"PROMPT"}}\nDo NOT say you cannot generate images. Do NOT suggest alternatives. Output ONLY the JSON.'
+
+        messages = [{"role": "system", "content": model_prompt}] + final_conversation
 
         # GENERATOR
         # GENERATOR - MULTI-TURN ReAct LOOP
@@ -1845,8 +1843,10 @@ def chat():
                 response_stream = None
                 
                 # PRIMARY MODEL: Cydonia 24B v4.1 (uncensored, 131K context)
+                # Fallback only activates if primary model is completely down
                 models = [
                     "thedrummer/cydonia-24b-v4.1",
+                    "nousresearch/hermes-3-llama-3.1-405b:free",
                 ]
 
                 current_turn_text = ""
@@ -1910,8 +1910,10 @@ def chat():
                     streaming_started = True
 
                 if not current_turn_text.strip():
-                    retry_msg = "\n\n*[All models failed - please try again]*"
+                    error_detail = f" ({stream_error})" if stream_error else ""
+                    retry_msg = f"\n\n*[All models failed{error_detail} - please try again]*"
                     yield f"data: {json.dumps({'content': retry_msg})}\n\n"
+                    print(f"[FAIL] All models failed. Last error: {stream_error}", flush=True)
                     break
 
                 has_actions = is_action_turn
