@@ -55,4 +55,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8080/health')" || exit 1
 
 # Start Flask server
-CMD ["sh", "-c", "gunicorn chat_server:app --bind 0.0.0.0:${PORT:-8080} --workers 4 --timeout 120"]
+CMD ["sh", "-c", "gunicorn chat_server:app --bind 0.0.0.0:${PORT:-8080} --workers 2 --threads 2 --timeout 120 --max-requests 1000 --max-requests-jitter 50"]

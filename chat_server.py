@@ -160,9 +160,8 @@ def login_required(f):
         # SECURITY: Verify user still exists and is not banned
         try:
             username = session.get('username')
-            conn = get_db_connection()
-            user = conn.execute('SELECT 1 FROM users WHERE username = %s', (username,)).fetchone()
-            conn.close()
+            with get_db_connection() as conn:
+                user = conn.execute('SELECT 1 FROM users WHERE username = %s', (username,)).fetchone()
             
             if not user:
                 session.clear()
@@ -222,8 +221,13 @@ def init_pool():
     global db_pool, mcp_manager
     if DATABASE_URL:
         try:
-            # Force IPv4 resolution to avoid Railway IPv6 incompatibility
+            # Use Supabase connection pooler (port 6543) for better connection management
             connection_url = DATABASE_URL
+            if ':5432/' in connection_url and 'supabase.co' in connection_url:
+                connection_url = connection_url.replace(':5432/', ':6543/')
+                print("🔄 Using Supabase connection pooler (port 6543)", flush=True)
+
+            # Force IPv4 resolution to avoid Railway IPv6 incompatibility
             if 'supabase.co' in DATABASE_URL:
                 try:
                     import re
@@ -265,10 +269,12 @@ def init_pool():
         mcp_manager = None
 
 class ConnectionWrapper:
-    """Wraps psycopg2 connection to mimic sqlite3 conn.execute() pattern."""
+    """Wraps psycopg2 connection to mimic sqlite3 conn.execute() pattern.
+    Supports context manager (with statement) for safe connection handling."""
     def __init__(self, conn):
         self._conn = conn
         self._cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        self._closed = False
 
     def execute(self, query, params=None):
         self._cursor.execute(query, params)
@@ -281,14 +287,56 @@ class ConnectionWrapper:
         self._conn.rollback()
 
     def close(self):
-        self._cursor.close()
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._cursor.close()
+        except Exception:
+            pass
         if db_pool:
-            db_pool.putconn(self._conn)
+            try:
+                db_pool.putconn(self._conn)
+            except Exception:
+                pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            try:
+                self.rollback()
+            except Exception:
+                pass
+        self.close()
+        return False
+
+    def __del__(self):
+        """Safety net: return connection to pool if close() was never called."""
+        if not self._closed:
+            self.close()
 
 def get_db_connection():
     if db_pool is None:
         raise Exception("Database connection pool not available")
     raw_conn = db_pool.getconn()
+    # Validate connection is alive and reset state
+    try:
+        raw_conn.rollback()
+        cur = raw_conn.cursor()
+        cur.execute("SELECT 1")
+        cur.close()
+    except Exception:
+        try:
+            db_pool.putconn(raw_conn, close=True)
+        except Exception:
+            pass
+        raw_conn = db_pool.getconn()
+        try:
+            raw_conn.rollback()
+        except Exception:
+            pass
     return ConnectionWrapper(raw_conn)
 
 def init_db():
@@ -335,11 +383,10 @@ except Exception as e:
 def log_system_event(level, message):
     """Log a system event to the database for admin dashboard."""
     try:
-        conn = get_db_connection()
-        conn.execute('INSERT INTO system_logs (level, message, timestamp) VALUES (%s, %s, %s)',
-                     (level, message, datetime.datetime.now()))
-        conn.commit()
-        conn.close()
+        with get_db_connection() as conn:
+            conn.execute('INSERT INTO system_logs (level, message, timestamp) VALUES (%s, %s, %s)',
+                         (level, message, datetime.datetime.now()))
+            conn.commit()
     except Exception as e:
         print(f"Log Error: {e}")
 
@@ -617,47 +664,42 @@ def admin_dashboard():
 @limiter.exempt
 @login_required
 def admin_data():
-    conn = get_db_connection()
     admin_user = get_env_var('ADMIN_USERNAME', 'Admin')
     if session.get('username') != admin_user:
-        conn.close()
         return jsonify({'error': 'Unauthorized'}), 403
 
-    # 1. Total Users (Optimized)
-    # 1. Total Users (Optimized with Payment Stats)
-    query = '''
-        SELECT 
-            u.username, 
-            u.has_paid, 
-            u.created_at, 
-            u.last_login, 
-            u.ip_address, 
-            u.user_agent,
-            u.subscription_expiry,
-            COUNT(DISTINCT m.id) as msg_count,
-            COUNT(DISTINCT p.id) as payment_count
-        FROM users u
-        LEFT JOIN sessions s ON u.username = s.username
-        LEFT JOIN messages m ON s.id = m.session_id
-        LEFT JOIN payments p ON u.username = p.username
-        GROUP BY u.username
-        ORDER BY u.last_login DESC
-    '''
-    users = conn.execute(query).fetchall()
-    
-    users_data = []
-    for u in users:
-        u_dict = dict(u)
-        # Fix JSON Serialization for dates
-        if u_dict.get('last_login'): u_dict['last_login'] = str(u_dict['last_login'])
-        if u_dict.get('created_at'): u_dict['created_at'] = str(u_dict['created_at'])
-        if u_dict.get('subscription_expiry'): u_dict['subscription_expiry'] = str(u_dict['subscription_expiry'])
-        users_data.append(u_dict)
-    
-    # 2. Total Sessions
-    total_sessions = conn.execute('SELECT COUNT(*) AS count FROM sessions').fetchone()['count']
-    
-    conn.close()
+    with get_db_connection() as conn:
+        # 1. Total Users (Optimized with Payment Stats)
+        query = '''
+            SELECT
+                u.username,
+                u.has_paid,
+                u.created_at,
+                u.last_login,
+                u.ip_address,
+                u.user_agent,
+                u.subscription_expiry,
+                COUNT(DISTINCT m.id) as msg_count,
+                COUNT(DISTINCT p.id) as payment_count
+            FROM users u
+            LEFT JOIN sessions s ON u.username = s.username
+            LEFT JOIN messages m ON s.id = m.session_id
+            LEFT JOIN payments p ON u.username = p.username
+            GROUP BY u.username
+            ORDER BY u.last_login DESC
+        '''
+        users = conn.execute(query).fetchall()
+
+        users_data = []
+        for u in users:
+            u_dict = dict(u)
+            if u_dict.get('last_login'): u_dict['last_login'] = str(u_dict['last_login'])
+            if u_dict.get('created_at'): u_dict['created_at'] = str(u_dict['created_at'])
+            if u_dict.get('subscription_expiry'): u_dict['subscription_expiry'] = str(u_dict['subscription_expiry'])
+            users_data.append(u_dict)
+
+        # 2. Total Sessions
+        total_sessions = conn.execute('SELECT COUNT(*) AS count FROM sessions').fetchone()['count']
     
     # 3. Calculate Real-Time Stats
     now = datetime.datetime.now()
@@ -706,30 +748,22 @@ def admin_toggle_premium(target_user):
     if session.get('username') != admin_user:
         return jsonify({'error': 'Unauthorized'}), 403
 
-    conn = get_db_connection()
-    # Get current status
-    curr = conn.execute('SELECT has_paid FROM users WHERE username = %s', (target_user,)).fetchone()
-    if not curr:
-        conn.close()
-        return jsonify({'error': 'User not found'}), 404
-        
-    new_status = False if curr['has_paid'] else True
-    
-    # Logic for Expiry and Log Payment
-    if new_status:
-        # ADD 30 DAYS
-        expiry = datetime.datetime.now() + datetime.timedelta(days=30)
-        conn.execute('UPDATE users SET has_paid = TRUE, subscription_expiry = %s WHERE username = %s', (expiry, target_user))
-        # Record Manual Payment
-        conn.execute('INSERT INTO payments (username, amount, tx_id, date, method) VALUES (%s, %s, %s, %s, %s)',
-                     (target_user, 0.00, f"MANUAL_{int(datetime.datetime.now().timestamp())}", datetime.datetime.now(), 'ADMIN_GRANT'))
-    else:
-        # REVOKE / BLOCK
-        # Only clear 'has_paid', keep expiry or clear it? Clearing it ensures immediate block.
-        conn.execute('UPDATE users SET has_paid = FALSE, subscription_expiry = NULL WHERE username = %s', (target_user,))
-        
-    conn.commit()
-    conn.close()
+    with get_db_connection() as conn:
+        curr = conn.execute('SELECT has_paid FROM users WHERE username = %s', (target_user,)).fetchone()
+        if not curr:
+            return jsonify({'error': 'User not found'}), 404
+
+        new_status = False if curr['has_paid'] else True
+
+        if new_status:
+            expiry = datetime.datetime.now() + datetime.timedelta(days=30)
+            conn.execute('UPDATE users SET has_paid = TRUE, subscription_expiry = %s WHERE username = %s', (expiry, target_user))
+            conn.execute('INSERT INTO payments (username, amount, tx_id, date, method) VALUES (%s, %s, %s, %s, %s)',
+                         (target_user, 0.00, f"MANUAL_{int(datetime.datetime.now().timestamp())}", datetime.datetime.now(), 'ADMIN_GRANT'))
+        else:
+            conn.execute('UPDATE users SET has_paid = FALSE, subscription_expiry = NULL WHERE username = %s', (target_user,))
+
+        conn.commit()
     return jsonify({'success': True, 'new_status': new_status})
 
 @app.route('/api/admin/users/<target_user>', methods=['DELETE'])
@@ -780,34 +814,31 @@ def admin_get_user_chats(target_user):
     if session.get('username') != admin_user:
         return jsonify({'error': 'Unauthorized'}), 403
 
-    conn = get_db_connection()
-    # Get all sessions for user
-    sessions = conn.execute('SELECT id, title, created_at FROM sessions WHERE username = %s ORDER BY created_at DESC', (target_user,)).fetchall()
-    
-    history = []
-    for sess in sessions:
-        msgs = conn.execute('SELECT role, content, timestamp FROM messages WHERE session_id = %s ORDER BY timestamp ASC', (sess['id'],)).fetchall()
-        
-        # Decrypt messages
-        decrypted_msgs = []
-        for m in msgs:
-            try:
-                content = decrypt_data(m['content'])
-            except: content = "[ENCRYPTED/ERROR]"
-            decrypted_msgs.append({
-                'role': m['role'],
-                'content': content,
-                'timestamp': m['timestamp']
+    with get_db_connection() as conn:
+        sessions = conn.execute('SELECT id, title, created_at FROM sessions WHERE username = %s ORDER BY created_at DESC', (target_user,)).fetchall()
+
+        history = []
+        for sess in sessions:
+            msgs = conn.execute('SELECT role, content, timestamp FROM messages WHERE session_id = %s ORDER BY timestamp ASC', (sess['id'],)).fetchall()
+
+            decrypted_msgs = []
+            for m in msgs:
+                try:
+                    content = decrypt_data(m['content'])
+                except: content = "[ENCRYPTED/ERROR]"
+                decrypted_msgs.append({
+                    'role': m['role'],
+                    'content': content,
+                    'timestamp': m['timestamp']
+                })
+
+            history.append({
+                'session_id': sess['id'],
+                'title': sess['title'],
+                'created_at': sess['created_at'],
+                'messages': decrypted_msgs
             })
-            
-        history.append({
-            'session_id': sess['id'],
-            'title': sess['title'],
-            'created_at': sess['created_at'],
-            'messages': decrypted_msgs
-        })
-        
-    conn.close()
+
     return jsonify({'history': history})
 
 @app.route('/api/admin/broadcast', methods=['POST'])
@@ -822,14 +853,11 @@ def admin_broadcast():
     message = data.get('message')
     if not message: return jsonify({'error': 'No message'}), 400
     
-    conn = get_db_connection()
-    # Deactivate others
-    conn.execute('UPDATE system_alerts SET is_active = FALSE')
-    # Insert new
-    conn.execute('INSERT INTO system_alerts (message, type, created_at, is_active) VALUES (%s, %s, %s, TRUE)',
-                 (message, 'warning', datetime.datetime.now()))
-    conn.commit()
-    conn.close()
+    with get_db_connection() as conn:
+        conn.execute('UPDATE system_alerts SET is_active = FALSE')
+        conn.execute('INSERT INTO system_alerts (message, type, created_at, is_active) VALUES (%s, %s, %s, TRUE)',
+                     (message, 'warning', datetime.datetime.now()))
+        conn.commit()
     log_system_event('ALERT', f"Admin broadcasted: {message}")
     return jsonify({'success': True})
 
@@ -839,14 +867,12 @@ def get_system_alert():
         return jsonify({'alert': None})
 
     try:
-        conn = get_db_connection()
-        # Get latest active alert from last hour
-        alert = conn.execute('''
-            SELECT message, type, created_at FROM system_alerts
-            WHERE is_active = TRUE
-            ORDER BY created_at DESC LIMIT 1
-        ''').fetchone()
-        conn.close()
+        with get_db_connection() as conn:
+            alert = conn.execute('''
+                SELECT message, type, created_at FROM system_alerts
+                WHERE is_active = TRUE
+                ORDER BY created_at DESC LIMIT 1
+            ''').fetchone()
     except:
         return jsonify({'alert': None})
     
@@ -872,9 +898,8 @@ def admin_logs():
     if session.get('username') != admin_user:
         return jsonify({'error': 'Unauthorized'}), 403
         
-    conn = get_db_connection()
-    logs = conn.execute('SELECT level, message, timestamp FROM system_logs ORDER BY timestamp DESC LIMIT 50').fetchall()
-    conn.close()
+    with get_db_connection() as conn:
+        logs = conn.execute('SELECT level, message, timestamp FROM system_logs ORDER BY timestamp DESC LIMIT 50').fetchall()
     return jsonify({'logs': [dict(l) for l in logs]})
 
 # --- ROUTES ---
@@ -947,53 +972,49 @@ def login():
             else:
                 return jsonify({'success': False, 'error': 'Database unavailable. Only admin login allowed.'}), 503
 
-        conn = get_db_connection()
-        user = conn.execute('SELECT * FROM users WHERE username = %s', (username,)).fetchone()
-        
-        if user and check_password_hash(user['password_hash'], password):
-            # 1. Base Status (Lifetime)
-            is_active = bool(user['has_paid'])
+        with get_db_connection() as conn:
+            user = conn.execute('SELECT * FROM users WHERE username = %s', (username,)).fetchone()
 
-            # 2. Subscription Check (30 Days)
-            expiry_str = user['subscription_expiry'] if 'subscription_expiry' in user.keys() else None
-            if expiry_str:
+            if user and check_password_hash(user['password_hash'], password):
+                # 1. Base Status (Lifetime)
+                is_active = bool(user['has_paid'])
+
+                # 2. Subscription Check (30 Days)
+                expiry_str = user['subscription_expiry'] if 'subscription_expiry' in user.keys() else None
+                if expiry_str:
+                    try:
+                        expiry_dt = expiry_str if isinstance(expiry_str, datetime.datetime) else datetime.datetime.strptime(str(expiry_str), '%Y-%m-%d %H:%M:%S.%f')
+                        if expiry_dt > datetime.datetime.now():
+                            is_active = True
+                    except: pass
+
+                # 3. ADMIN OVERRIDE: Always active
+                admin_user = get_env_var('ADMIN_USERNAME', 'Admin')
+                if user['username'] == admin_user:
+                    is_active = True
+
+                # 4. Credits check - allow access if user has remaining credits
+                user_credits = user['credits'] if 'credits' in user.keys() else 0
+                has_access = is_active or user_credits > 0
+
+                session['logged_in'] = True
+                session['username'] = user['username']
+                session['has_paid'] = has_access
+                session['credits'] = user_credits
+                session.permanent = True
+
+                # UPDATE TRACKING
                 try:
-                    # Format: YYYY-MM-DD HH:MM:SS.ssssss
-                    expiry_dt = expiry_str if isinstance(expiry_str, datetime.datetime) else datetime.datetime.strptime(str(expiry_str), '%Y-%m-%d %H:%M:%S.%f')
-                    if expiry_dt > datetime.datetime.now():
-                        is_active = True
+                    ip = get_remote_address()
+                    ua = request.user_agent.string
+                    now = datetime.datetime.now()
+                    conn.execute('UPDATE users SET ip_address = %s, user_agent = %s, last_login = %s WHERE username = %s', (ip, ua, now, username))
+                    conn.commit()
                 except: pass
-            
-            # 3. ADMIN OVERRIDE: Always active
-            admin_user = get_env_var('ADMIN_USERNAME', 'Admin')
-            if user['username'] == admin_user:
-                is_active = True
-                
-            # 4. Credits check - allow access if user has remaining credits
-            user_credits = user['credits'] if 'credits' in user.keys() else 0
-            has_access = is_active or user_credits > 0
 
-            session['logged_in'] = True
-            session['username'] = user['username']
-            session['has_paid'] = has_access
-            session['credits'] = user_credits
-            session.permanent = True
+                return jsonify({'success': True, 'has_paid': is_active, 'credits': user_credits})
 
-            # UPDATE TRACKING
-            ip = "unknown"
-            try:
-                ip = get_remote_address()
-                ua = request.user_agent.string
-                now = datetime.datetime.now()
-                conn.execute('UPDATE users SET ip_address = %s, user_agent = %s, last_login = %s WHERE username = %s', (ip, ua, now, username))
-                conn.commit()
-            except: pass
-
-            conn.close()
-            return jsonify({'success': True, 'has_paid': is_active, 'credits': user_credits})    
-        
-        conn.close()
-        return jsonify({'success': False, 'error': 'Invalid username or password'}), 401
+            return jsonify({'success': False, 'error': 'Invalid username or password'}), 401
     except Exception as e:
         print(f"❌ LOGIN ERROR: {e}")
         import traceback
@@ -1184,12 +1205,11 @@ def payment_success():
             if cs.payment_status == 'paid' and cs.client_reference_id == username:
                 # Grant access for 30 days
                 new_expiry = datetime.datetime.now() + datetime.timedelta(days=30)
-                conn = get_db_connection()
-                conn.execute('UPDATE users SET has_paid = TRUE, subscription_expiry = %s WHERE username = %s', (new_expiry, username))
-                conn.execute('INSERT INTO payments (username, amount, tx_id, date, method) VALUES (%s, %s, %s, %s, %s)',
-                             (username, 9.99, cs.subscription or cs.id, datetime.datetime.now(), 'STRIPE'))
-                conn.commit()
-                conn.close()
+                with get_db_connection() as conn:
+                    conn.execute('UPDATE users SET has_paid = TRUE, subscription_expiry = %s WHERE username = %s', (new_expiry, username))
+                    conn.execute('INSERT INTO payments (username, amount, tx_id, date, method) VALUES (%s, %s, %s, %s, %s)',
+                                 (username, 9.99, cs.subscription or cs.id, datetime.datetime.now(), 'STRIPE'))
+                    conn.commit()
 
                 session['has_paid'] = True
                 log_system_event('PAYMENT', f"Stripe subscription activated for {username}")
@@ -1221,20 +1241,18 @@ def stripe_webhook():
         username = subscription.get('metadata', {}).get('username') or subscription.get('client_reference_id')
         if username:
             new_expiry = datetime.datetime.now() + datetime.timedelta(days=30)
-            conn = get_db_connection()
-            conn.execute('UPDATE users SET has_paid = TRUE, subscription_expiry = %s WHERE username = %s', (new_expiry, username))
-            conn.commit()
-            conn.close()
+            with get_db_connection() as conn:
+                conn.execute('UPDATE users SET has_paid = TRUE, subscription_expiry = %s WHERE username = %s', (new_expiry, username))
+                conn.commit()
 
     elif event.get('type') in ['customer.subscription.deleted', 'invoice.payment_failed']:
         # Subscription cancelled or payment failed
         subscription = event['data']['object']
         username = subscription.get('metadata', {}).get('username')
         if username:
-            conn = get_db_connection()
-            conn.execute('UPDATE users SET has_paid = FALSE, subscription_expiry = NULL WHERE username = %s', (username,))
-            conn.commit()
-            conn.close()
+            with get_db_connection() as conn:
+                conn.execute('UPDATE users SET has_paid = FALSE, subscription_expiry = NULL WHERE username = %s', (username,))
+                conn.commit()
 
     return jsonify({'received': True})
 
@@ -1286,10 +1304,8 @@ def list_sessions():
         return jsonify([])
     try:
         username = session.get('username')
-        conn = get_db_connection()
-        # FILTER BY USERNAME
-        sessions = conn.execute('SELECT * FROM sessions WHERE username = %s ORDER BY created_at DESC', (username,)).fetchall()
-        conn.close()
+        with get_db_connection() as conn:
+            sessions = conn.execute('SELECT * FROM sessions WHERE username = %s ORDER BY created_at DESC', (username,)).fetchall()
         return jsonify([dict(ix) for ix in sessions])
     except:
         return jsonify([])
@@ -1306,11 +1322,10 @@ def create_session():
         return jsonify({'id': session_id, 'title': title})
 
     try:
-        conn = get_db_connection()
-        conn.execute('INSERT INTO sessions (id, title, created_at, username) VALUES (%s, %s, %s, %s)',
-                     (session_id, title, created_at, username))
-        conn.commit()
-        conn.close()
+        with get_db_connection() as conn:
+            conn.execute('INSERT INTO sessions (id, title, created_at, username) VALUES (%s, %s, %s, %s)',
+                         (session_id, title, created_at, username))
+            conn.commit()
         return jsonify({'id': session_id, 'title': title})
     except:
         return jsonify({'id': session_id, 'title': title})
@@ -1319,19 +1334,16 @@ def create_session():
 @login_required
 def load_session(session_id):
     username = session.get('username')
-    conn = get_db_connection()
-    
-    # SECURITY CHECK: OWNERSHIP (STRICT)
-    sess = conn.execute('SELECT username FROM sessions WHERE id = %s', (session_id,)).fetchone()
-    # Removed 'or username == Admin' to ensure CLIENT PRIVACY
-    if sess and sess['username'] and sess['username'] != username:
-        conn.close()
-        return jsonify({'error': 'Unauthorized access to this session'}), 403
+    with get_db_connection() as conn:
+        # SECURITY CHECK: OWNERSHIP (STRICT)
+        sess = conn.execute('SELECT username FROM sessions WHERE id = %s', (session_id,)).fetchone()
+        # Removed 'or username == Admin' to ensure CLIENT PRIVACY
+        if sess and sess['username'] and sess['username'] != username:
+            return jsonify({'error': 'Unauthorized access to this session'}), 403
 
-    # DECRYPTAGE
-    rows = conn.execute('SELECT id, role, content FROM messages WHERE session_id = %s ORDER BY id ASC', (session_id,)).fetchall()
-    conn.close()
-    
+        # DECRYPTAGE
+        rows = conn.execute('SELECT id, role, content FROM messages WHERE session_id = %s ORDER BY id ASC', (session_id,)).fetchall()
+
     decrypted_history = []
     for row in rows:
         d_content = decrypt_data(row['content'])
@@ -1352,18 +1364,15 @@ def load_session(session_id):
 @login_required
 def delete_session(session_id):
     username = session.get('username')
-    conn = get_db_connection()
-    
-    # SECURITY CHECK
-    sess = conn.execute('SELECT username FROM sessions WHERE id = %s', (session_id,)).fetchone()
-    if sess and sess['username'] != username:
-        conn.close()
-        return jsonify({'error': 'Unauthorized'}), 403
-        
-    conn.execute('DELETE FROM sessions WHERE id = %s', (session_id,))
-    conn.execute('DELETE FROM messages WHERE session_id = %s', (session_id,))
-    conn.commit()
-    conn.close()
+    with get_db_connection() as conn:
+        # SECURITY CHECK
+        sess = conn.execute('SELECT username FROM sessions WHERE id = %s', (session_id,)).fetchone()
+        if sess and sess['username'] != username:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        conn.execute('DELETE FROM sessions WHERE id = %s', (session_id,))
+        conn.execute('DELETE FROM messages WHERE session_id = %s', (session_id,))
+        conn.commit()
     return jsonify({'success': True})
 
 @app.route('/api/sessions/<session_id>', methods=['PUT'])
@@ -1373,27 +1382,23 @@ def rename_session(session_id):
     data = request.json
     new_title = data.get('title')
     if not new_title: return jsonify({'error': 'Title required'}), 400
-    
-    conn = get_db_connection()
-    
-    # SECURITY CHECK
-    sess = conn.execute('SELECT username FROM sessions WHERE id = %s', (session_id,)).fetchone()
-    if sess and sess['username'] != username:
-        conn.close()
-        return jsonify({'error': 'Unauthorized'}), 403
-        
-    conn.execute('UPDATE sessions SET title = %s WHERE id = %s', (new_title, session_id))
-    conn.commit()
-    conn.close()
+
+    with get_db_connection() as conn:
+        # SECURITY CHECK
+        sess = conn.execute('SELECT username FROM sessions WHERE id = %s', (session_id,)).fetchone()
+        if sess and sess['username'] != username:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        conn.execute('UPDATE sessions SET title = %s WHERE id = %s', (new_title, session_id))
+        conn.commit()
     return jsonify({'success': True, 'title': new_title})
 
 @app.route('/api/messages/<int:msg_id>', methods=['DELETE'])
 @login_required # SECURED
 def delete_message(msg_id):
-    conn = get_db_connection()
-    conn.execute('DELETE FROM messages WHERE id = %s', (msg_id,))
-    conn.commit()
-    conn.close()
+    with get_db_connection() as conn:
+        conn.execute('DELETE FROM messages WHERE id = %s', (msg_id,))
+        conn.commit()
     return jsonify({'success': True})
 
 @app.route('/api/messages/<int:msg_id>', methods=['PUT'])
@@ -1406,10 +1411,9 @@ def update_message(msg_id):
     # Re-encrypt
     encrypted_content = encrypt_data(new_content)
     
-    conn = get_db_connection()
-    conn.execute('UPDATE messages SET content = %s WHERE id = %s', (encrypted_content, msg_id))
-    conn.commit()
-    conn.close()
+    with get_db_connection() as conn:
+        conn.execute('UPDATE messages SET content = %s WHERE id = %s', (encrypted_content, msg_id))
+        conn.commit()
     return jsonify({'success': True})
 
 @app.route('/api/tts', methods=['POST'])
@@ -1647,9 +1651,8 @@ def execute_code():
 def get_credits():
     """Return user's remaining credits and subscription status."""
     username = session.get('username')
-    conn = get_db_connection()
-    user = conn.execute('SELECT has_paid, credits, subscription_expiry FROM users WHERE username = %s', (username,)).fetchone()
-    conn.close()
+    with get_db_connection() as conn:
+        user = conn.execute('SELECT has_paid, credits, subscription_expiry FROM users WHERE username = %s', (username,)).fetchone()
 
     if not user:
         return jsonify({'credits': 0, 'is_subscribed': False})
@@ -1722,98 +1725,84 @@ def chat():
 
             # Jump to image generation check and AI response
         else:
-            conn = get_db_connection()
+            with get_db_connection() as conn:
+                # 0. CHECK CREDITS OR SUBSCRIPTION
+                user_row = conn.execute('SELECT has_paid, credits, subscription_expiry FROM users WHERE username = %s', (username,)).fetchone()
+                if user_row:
+                    is_subscribed = bool(user_row['has_paid'])
+                    user_credits = user_row['credits'] if user_row['credits'] else 0
 
-            # 0. CHECK CREDITS OR SUBSCRIPTION
-            user_row = conn.execute('SELECT has_paid, credits, subscription_expiry FROM users WHERE username = %s', (username,)).fetchone()
-            if user_row:
-                is_subscribed = bool(user_row['has_paid'])
-                user_credits = user_row['credits'] if user_row['credits'] else 0
+                    expiry_str = user_row['subscription_expiry']
+                    if expiry_str:
+                        try:
+                            expiry_dt = expiry_str if isinstance(expiry_str, datetime.datetime) else datetime.datetime.strptime(str(expiry_str), '%Y-%m-%d %H:%M:%S.%f')
+                            if expiry_dt > datetime.datetime.now():
+                                is_subscribed = True
+                        except: pass
 
-                # Check subscription expiry
-                expiry_str = user_row['subscription_expiry']
-                if expiry_str:
-                    try:
-                        expiry_dt = expiry_str if isinstance(expiry_str, datetime.datetime) else datetime.datetime.strptime(str(expiry_str), '%Y-%m-%d %H:%M:%S.%f')
-                        if expiry_dt > datetime.datetime.now():
-                            is_subscribed = True
-                    except: pass
+                    admin_user = get_env_var('ADMIN_USERNAME', 'Admin')
+                    if username == admin_user:
+                        is_subscribed = True
 
-                # Admin always has access
-                admin_user = get_env_var('ADMIN_USERNAME', 'Admin')
-                if username == admin_user:
-                    is_subscribed = True
+                    if not is_subscribed and user_credits <= 0:
+                        return jsonify({'error': 'NO_CREDITS', 'message': 'You have no credits left. Subscribe to continue.'}), 403
 
-                if not is_subscribed and user_credits <= 0:
-                    conn.close()
-                    return jsonify({'error': 'NO_CREDITS', 'message': 'You have no credits left. Subscribe to continue.'}), 403
+                    if not is_subscribed and user_credits > 0:
+                        new_credits = user_credits - 1
+                        conn.execute('UPDATE users SET credits = %s WHERE username = %s', (new_credits, username))
+                        conn.commit()
+                        session['credits'] = new_credits
 
-                # Deduct 1 credit if not subscribed
-                if not is_subscribed and user_credits > 0:
-                    new_credits = user_credits - 1
-                    conn.execute('UPDATE users SET credits = %s WHERE username = %s', (new_credits, username))
+                # 1. VERIFY OWNERSHIP & EXISTENCE
+                sess = conn.execute('SELECT username FROM sessions WHERE id = %s', (session_id,)).fetchone()
+                if not sess:
+                    return jsonify({'error': 'Session not found'}), 404
+
+                if sess['username'] != username:
+                    return jsonify({'error': 'Unauthorized'}), 403
+
+                # AUTO-DETECT WEB SEARCH INTENT
+                base_triggers = ['actualité', 'news', 'info', 'météo', 'récent', 'dernier', 'latest', 'cours du', 'prix du', 'aujourd', 'ce jour', '2025', 'canada', 'france', 'monde']
+                astro_triggers = ['lune', 'soleil', 'planète', 'étoile', 'position', 'ciel', 'espace']
+                question_triggers = ['où est', 'quand', 'combien', 'qui est', 'résultat', 'score', 'c\'est quoi', 'montre-moi', 'trouve']
+                tech_triggers = ['internet', 'web', 'google', 'recherche', 'online', 'en ligne', 'navigateur', 'browser', 'url', 'site', 'page']
+
+                triggers = base_triggers + astro_triggers + question_triggers + tech_triggers
+
+                if any(t in user_message.lower() for t in triggers) and not use_web_search:
+                    print(f"🌍 Auto-Enabling Google Search (Keyword Detected)")
+                    use_web_search = True
+
+                # UPDATE TITLE IF FIRST MESSAGE
+                msg_count = conn.execute('SELECT COUNT(*) AS count FROM messages WHERE session_id = %s', (session_id,)).fetchone()['count']
+                if msg_count == 0:
+                    title = user_message[:30] + "..." if len(user_message) > 30 else user_message
+                    conn.execute('UPDATE sessions SET title = %s WHERE id = %s', (title, session_id))
                     conn.commit()
-                    session['credits'] = new_credits
 
-            # 1. VERIFY OWNERSHIP & EXISTENCE
-            sess = conn.execute('SELECT username FROM sessions WHERE id = %s', (session_id,)).fetchone()
-            if not sess:
-                # Auto-create if not exists? Or Error?
-                # Better to auto-create and assign to user if ID is valid UUID but not in DB (Edge case)
-                # But normally client calls create_session first.
-                # So ID should be valid.
-                conn.close()
-                return jsonify({'error': 'Session not found'}), 404
+                web_context = ""
+                if use_web_search:
+                    res = search_web(user_message)
+                    if res: web_context = f"\n\n[WEB DATA]:\n{res}\n\nINSTRUCTION: Use data."
 
-            if sess['username'] != username:
-                conn.close()
-                return jsonify({'error': 'Unauthorized'}), 403
-
-            # AUTO-DETECT WEB SEARCH INTENT 🌍
-            base_triggers = ['actualité', 'news', 'info', 'météo', 'récent', 'dernier', 'latest', 'cours du', 'prix du', 'aujourd', 'ce jour', '2025', 'canada', 'france', 'monde']
-            astro_triggers = ['lune', 'soleil', 'planète', 'étoile', 'position', 'ciel', 'espace']
-            question_triggers = ['où est', 'quand', 'combien', 'qui est', 'résultat', 'score', 'c\'est quoi', 'montre-moi', 'trouve']
-            tech_triggers = ['internet', 'web', 'google', 'recherche', 'online', 'en ligne', 'navigateur', 'browser', 'url', 'site', 'page']
-
-            triggers = base_triggers + astro_triggers + question_triggers + tech_triggers
-
-            if any(t in user_message.lower() for t in triggers) and not use_web_search:
-                print(f"🌍 Auto-Enabling Google Search (Keyword Detected)")
-                use_web_search = True
-
-            # UPDATE TITLE IF FIRST MESSAGE
-            # Check message count
-            msg_count = conn.execute('SELECT COUNT(*) AS count FROM messages WHERE session_id = %s', (session_id,)).fetchone()['count']
-            if msg_count == 0:
-                title = user_message[:30] + "..." if len(user_message) > 30 else user_message
-                conn.execute('UPDATE sessions SET title = %s WHERE id = %s', (title, session_id))
+                # SAVE ENCRYPTED USER MESSAGE
+                encrypted_msg = encrypt_data(user_message)
+                conn.execute('INSERT INTO messages (session_id, role, content, timestamp) VALUES (%s, %s, %s, %s)',
+                             (session_id, 'user', encrypted_msg, datetime.datetime.now()))
                 conn.commit()
-            
-            web_context = ""
-            if use_web_search:
-                res = search_web(user_message)
-                if res: web_context = f"\n\n[WEB DATA]:\n{res}\n\nINSTRUCTION: Use data."
-        
-            # SAVE ENCRYPTED USER MESSAGE
-            encrypted_msg = encrypt_data(user_message)
-            conn.execute('INSERT INTO messages (session_id, role, content, timestamp) VALUES (%s, %s, %s, %s)', 
-                         (session_id, 'user', encrypted_msg, datetime.datetime.now()))
-            conn.commit()
-        
-            # REBUILD CONTEXT (STATELESS LOAD)
-            # Fetch last 20 messages for context
-            rows = conn.execute('SELECT role, content FROM messages WHERE session_id = %s ORDER BY id ASC', (session_id,)).fetchall()
-        
-            conversation_history = []
-            for row in rows:
-                d_content = decrypt_data(row['content'])
-                try:
-                    if isinstance(d_content, str) and (d_content.strip().startswith('[') or d_content.strip().startswith('{')):
-                        d_content = json.loads(d_content)
-                except: pass
-                conversation_history.append({"role": row['role'], "content": d_content})
-            
-            conn.close() # Close DB before long generation
+
+                # REBUILD CONTEXT (STATELESS LOAD)
+                rows = conn.execute('SELECT role, content FROM messages WHERE session_id = %s ORDER BY id ASC', (session_id,)).fetchall()
+
+                conversation_history = []
+                for row in rows:
+                    d_content = decrypt_data(row['content'])
+                    try:
+                        if isinstance(d_content, str) and (d_content.strip().startswith('[') or d_content.strip().startswith('{')):
+                            d_content = json.loads(d_content)
+                    except: pass
+                    conversation_history.append({"role": row['role'], "content": d_content})
+            # Connection closed automatically before long generation
         
         # --- RAG: RETRIEVE MEMORY CONTEXT ---
         memory_context = ""
@@ -1862,11 +1851,10 @@ def chat():
                 ])
                 
                 # Encrypt and Save Assistant Response IMMEDIATELY
-                conn = get_db_connection()
-                conn.execute('INSERT INTO messages (session_id, role, content, timestamp) VALUES (%s, %s, %s, %s)', 
-                             (session_id, 'assistant', encrypt_data(rich_content), datetime.datetime.now()))
-                conn.commit()
-                conn.close()
+                with get_db_connection() as conn:
+                    conn.execute('INSERT INTO messages (session_id, role, content, timestamp) VALUES (%s, %s, %s, %s)',
+                                 (session_id, 'assistant', encrypt_data(rich_content), datetime.datetime.now()))
+                    conn.commit()
                 
                 # Return single event to close stream
                 def generate_image_event():
