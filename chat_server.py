@@ -1780,50 +1780,13 @@ def chat():
                 response_stream = None
                 
                 # UNCENSORED MODELS VIA OPENROUTER (ordered by preference)
-                # 1. Cydonia 24B v4.1 - Explicitly uncensored, 131K context
-                # 2. Hermes 3 405B (free) - Nous Research, uncensored
-                # 3. Llama 3.1 8B (free) - Fast and reliable fallback
-                # 4. Venice Uncensored (free) - ~2.2% refusal rate
                 models = [
                     "thedrummer/cydonia-24b-v4.1",
                     "nousresearch/hermes-3-llama-3.1-405b:free",
                     "meta-llama/llama-3.1-8b-instruct:free",
                     "venice/uncensored:free",
                 ]
-                last_error = None
-                for m in models:
-                    try:
-                        response_stream = client_openrouter.chat.completions.create(
-                            model=m, messages=conversation_context, max_tokens=4000, temperature=0.8, stream=True,
-                            timeout=60,
-                            extra_headers={"HTTP-Referer": "https://vif.lat", "X-Title": "VIF AI"}
-                        )
-                        print(f"Vif model: {m}", flush=True)
-                        break
-                    except Exception as e:
-                        last_error = str(e)
-                        print(f"Model {m} failed: {e}", flush=True)
-                        continue
 
-                if not response_stream:
-                    yield f"data: {json.dumps({'error': f'All models failed: {last_error}'})}\n\n"
-                    return
-
-                # STREAMING LOOP
-                # BUFFER FULL RESPONSE FOR ANALYSIS BEFORE STREAMING
-                # This prevents showing "I will browse..." if it's just an internal thought.
-                # However, for UX, we might want to see it planning. 
-                # User complaint is REPETITION.
-                # The issue: We yield chunks AS they come.
-                # Fix: If action is detected, we should NOT have yielded the previous text if it was just "I'm checking..." 
-                # But we can't un-yield.
-                
-                # BETTER APPROACH:
-                # 1. Capture full turn response.
-                # 2. Check if it contains actions using Regex.
-                # 3. If actions -> Perform actions, add observation, DO NOT SEND text to user (or send "Searching..." indicator).
-                # 4. If NO actions -> It's the final answer -> Stream it to user.
-                
                 current_turn_text = ""
                 initial_buffer = ""
                 is_action_turn = False
@@ -1831,39 +1794,62 @@ def chat():
                 streaming_started = False
                 stream_error = None
 
-                try:
-                    for chunk in response_stream:
-                        if not chunk.choices or not chunk.choices[0].delta.content:
-                            continue
-                        c = chunk.choices[0].delta.content
-                        full_response_for_execution += c
-                        current_turn_text += c
+                for m in models:
+                    try:
+                        response_stream = client_openrouter.chat.completions.create(
+                            model=m, messages=conversation_context, max_tokens=4000, temperature=0.8, stream=True,
+                            timeout=60,
+                            extra_headers={"HTTP-Referer": "https://vif.lat", "X-Title": "VIF AI"}
+                        )
+                    except Exception as e:
+                        print(f"Model {m} connect failed: {e}", flush=True)
+                        continue
 
-                        if not streaming_started:
-                            initial_buffer += c
-                            if len(initial_buffer) >= BUFFER_SIZE:
-                                if EXEC_REGEX.search(initial_buffer) or (mcp_manager and ('"mcp_call"' in initial_buffer)):
-                                    is_action_turn = True
-                                else:
-                                    streaming_started = True
-                                    yield f"data: {json.dumps({'content': initial_buffer})}\n\n"
-                        elif not is_action_turn:
-                            yield f"data: {json.dumps({'content': c})}\n\n"
-                except Exception as e:
-                    stream_error = str(e)
-                    print(f"Stream error: {e}", flush=True)
+                    # Read stream
+                    current_turn_text = ""
+                    initial_buffer = ""
+                    is_action_turn = False
+                    streaming_started = False
+                    stream_error = None
+
+                    try:
+                        for chunk in response_stream:
+                            if not chunk.choices or not chunk.choices[0].delta.content:
+                                continue
+                            c = chunk.choices[0].delta.content
+                            full_response_for_execution += c
+                            current_turn_text += c
+
+                            if not streaming_started:
+                                initial_buffer += c
+                                if len(initial_buffer) >= BUFFER_SIZE:
+                                    if EXEC_REGEX.search(initial_buffer) or (mcp_manager and ('"mcp_call"' in initial_buffer)):
+                                        is_action_turn = True
+                                    else:
+                                        streaming_started = True
+                                        yield f"data: {json.dumps({'content': initial_buffer})}\n\n"
+                            elif not is_action_turn:
+                                yield f"data: {json.dumps({'content': c})}\n\n"
+                    except Exception as e:
+                        stream_error = str(e)
+                        print(f"Stream error ({m}): {e}", flush=True)
+
+                    if current_turn_text.strip():
+                        print(f"Vif model: {m} ({len(current_turn_text)} chars)", flush=True)
+                        break
+                    else:
+                        print(f"Model {m} returned empty, trying next...", flush=True)
+                        full_response_for_execution = ""
+                        continue
 
                 if not streaming_started and not is_action_turn:
                     if current_turn_text:
                         yield f"data: {json.dumps({'content': current_turn_text})}\n\n"
                     streaming_started = True
 
-                if not current_turn_text.strip() or stream_error:
-                    error_msg = stream_error or "Model returned empty response"
-                    print(f"Empty/error response on turn {turn+1}: {error_msg}", flush=True)
-                    if turn == MAX_TURNS - 1 or not stream_error:
-                        retry_msg = "\n\n*[Connection lost - please resend your message]*"
-                        yield f"data: {json.dumps({'content': retry_msg})}\n\n"
+                if not current_turn_text.strip():
+                    retry_msg = "\n\n*[All models failed - please try again]*"
+                    yield f"data: {json.dumps({'content': retry_msg})}\n\n"
                     break
 
                 has_actions = is_action_turn

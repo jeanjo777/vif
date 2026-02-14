@@ -112,35 +112,15 @@ class MCPManager:
             if agent:
                 return agent.get_system_prompt()
 
-        description = "=== AVAILABLE MCP TOOLS ===\n\n"
-        description += f"You have access to {len(tools)} powerful tools across {len(self.servers)} servers:\n\n"
-
-        # Group by server
+        # Compact format to reduce token usage
+        server_lines = []
         for server_name, server in self.servers.items():
             if server.enabled:
-                description += f"[{server_name.upper()}] {server.description}\n"
-                for tool in server.list_tools():
-                    description += f"  • {tool['name']}: {tool['description']}\n"
-                description += "\n"
+                tool_names = [t['name'] for t in server.list_tools()]
+                server_lines.append(f"  {server_name}: {', '.join(tool_names)}")
 
-        description += "\nTO USE A TOOL, respond with JSON in this format:\n"
-        description += "```json\n"
-        description += '{\n'
-        description += '  "mcp_call": true,\n'
-        description += '  "server": "server_name",\n'
-        description += '  "tool": "tool_name",\n'
-        description += '  "parameters": {...}\n'
-        description += '}\n'
-        description += "```\n"
-
-        # Add agent information
-        if self.agents:
-            description += "\n=== SPECIALIZED AGENTS ===\n\n"
-            description += "Available agents for complex tasks:\n"
-            for agent_info in self.agents.list_agents():
-                description += f"  • {agent_info['name']}: {agent_info['description']}\n"
-            description += "\nUse agents for domain-specific expertise and multi-tool workflows.\n"
-
+        description = f"TOOLS ({len(tools)} available):\n" + "\n".join(server_lines)
+        description += '\n\nTo use a tool, respond with: {"mcp_call":true,"server":"name","tool":"tool_name","parameters":{...}}'
         return description
 
     def execute_tool(self, server_name: str, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
