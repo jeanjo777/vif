@@ -553,45 +553,46 @@ def scrape_page(url):
         print(f"⚠️ Scraping failed for {url}: {e}")
         return None
 
-def search_web(query, max_results=4):
-    print(f"🕵️🔥 DEEP SEARCHING for: {query}")
-    results = []
+def search_web(query, max_results=3):
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    print(f"🔍 Searching: {query}")
 
-    # 1. Get Links via DDGS (Fast & Reliable)
+    # 1. Get Links via DDGS
     links_to_scrape = []
     try:
         ddgs = DDGS()
-        # API compatible avec duckduckgo-search 3.x+
         search_results = list(ddgs.text(query, region='wt-wt', safesearch='off'))[:max_results]
-
         if search_results:
             for r in search_results:
                 links_to_scrape.append({'title': r.get('title'), 'href': r.get('href'), 'snippet': r.get('body')})
     except Exception as e:
-        print(f"❌ DDGS failed: {e}")
-        return None # Failed
+        print(f"DDGS failed: {e}")
+        return None
 
-    # 2. Scrape Content
-    final_report = f"--- INTELLIGENCE REPORT FOR: '{query}' ---\n\n"
-    
-    for item in links_to_scrape:
-        url = item['href']
-        title = item['title']
-        print(f"   ⬇️ Scraping: {title[:30]}...")
-        
-        content = scrape_page(url)
+    if not links_to_scrape:
+        return None
+
+    # 2. Scrape ALL pages in parallel
+    def _scrape_item(item):
+        content = scrape_page(item['href'])
         if not content:
-            # Fallback to snippet if scraping fails
-            content = f"[Scraping Failed] Snippet: {item['snippet']}"
+            content = item['snippet'] or ""
         else:
-            # Truncate content to avoid token explosion (Increased for completeness)
-            content = content[:12000].replace('\n', ' ') + "..."
-            
-        final_report += f"SOURCE: {title}\nURL: {url}\nCONTENT: {content}\n\n"
-        results.append(True)
-        
-    print(f"✅ Deep Search collected {len(results)} pages.")
-    return final_report
+            content = content[:3000]
+        return {'title': item['title'], 'url': item['href'], 'content': content}
+
+    final_report = ""
+    with ThreadPoolExecutor(max_workers=max_results) as executor:
+        futures = {executor.submit(_scrape_item, item): item for item in links_to_scrape}
+        for future in as_completed(futures):
+            try:
+                r = future.result(timeout=6)
+                final_report += f"SOURCE: {r['title']}\nURL: {r['url']}\nCONTENT: {r['content']}\n\n"
+            except Exception:
+                pass
+
+    print(f"Search done: {len(links_to_scrape)} pages")
+    return final_report if final_report else None
 
 # --- ADMIN DASHBOARD ---
 
@@ -1635,7 +1636,7 @@ def chat():
         selected_model = data.get('model', 'default')
         if selected_model == 'default':
             selected_model = 'hermes'
-        use_web_search = data.get('web_search', True)  # Web search enabled by default
+        use_web_search = data.get('web_search', False)  # Off by default, auto-triggers on keywords
 
         # Log web search status
         if use_web_search:
@@ -1735,8 +1736,8 @@ def chat():
                              (session_id, 'user', encrypted_msg, datetime.datetime.now()))
                 conn.commit()
 
-                # REBUILD CONTEXT (STATELESS LOAD)
-                rows = conn.execute('SELECT role, content FROM messages WHERE session_id = %s ORDER BY id ASC', (session_id,)).fetchall()
+                # REBUILD CONTEXT (last 20 messages for speed)
+                rows = conn.execute('SELECT role, content FROM (SELECT id, role, content FROM messages WHERE session_id = %s ORDER BY id DESC LIMIT 20) sub ORDER BY id ASC', (session_id,)).fetchall()
 
                 conversation_history = []
                 for row in rows:
@@ -1837,45 +1838,46 @@ def chat():
                 # 4. If NO actions -> It's the final answer -> Stream it to user.
                 
                 current_turn_text = ""
-                
+                initial_buffer = ""
+                is_action_turn = False
+                BUFFER_SIZE = 150
+                streaming_started = False
+
                 for chunk in response_stream:
                     if chunk.choices[0].delta.content:
                         c = chunk.choices[0].delta.content
                         full_response_for_execution += c
                         current_turn_text += c
-                        # We do NOT yield here yet. We wait to see if it's an action turn.
-                
-                # Check for actions in this complete turn
-                has_actions = False
+
+                        if not streaming_started:
+                            initial_buffer += c
+                            if len(initial_buffer) >= BUFFER_SIZE:
+                                if EXEC_REGEX.search(initial_buffer) or (mcp_manager and ('mcp_call' in initial_buffer or '"mcp_call"' in initial_buffer)):
+                                    is_action_turn = True
+                                else:
+                                    streaming_started = True
+                                    yield f"data: {json.dumps({'content': initial_buffer})}\n\n"
+                        elif not is_action_turn:
+                            yield f"data: {json.dumps({'content': c})}\n\n"
+
+                if not streaming_started and not is_action_turn:
+                    yield f"data: {json.dumps({'content': current_turn_text})}\n\n"
+                    streaming_started = True
+
+                has_actions = is_action_turn
                 has_mcp_call = False
 
-                # Check for web browsing actions
                 if EXEC_REGEX.search(full_response_for_execution):
-                     has_actions = True
-
-                # Check for MCP tool calls
+                    has_actions = True
                 if mcp_manager and ('mcp_call' in full_response_for_execution or '"mcp_call"' in full_response_for_execution):
                     has_mcp_call = True
-                    has_actions = True  # Treat MCP calls as actions
-                
-                # DECISION:
-                # If actions: Execute them. Do NOT show text (it's usually "I will browse google...").
-                # If NO actions: This is the final answer. Send current_turn_text to user.
-                
+                    has_actions = True
+
                 if not has_actions:
-                    # Stream the buffered text as the final response
-                    # Process for tags just in case, but usually clear text
-                    # Yield chunks to simulate streaming or just dump
-                    yield f"data: {json.dumps({'content': current_turn_text})}\n\n"
-                    cleaned_response_chunk += current_turn_text # Save for DB
+                    cleaned_response_chunk += current_turn_text
                     final_cleaned_response += current_turn_text
                 else:
-                    # It's an action turn. Log but don't show user.
                     print(f"🤖 Agent Thought (Hidden): {current_turn_text[:50]}...")
-                    # Maybe yield a small indicator?
-                    # yield f"data: {json.dumps({'content': ' *Analysing...* '})}\n\n"
-                    # No, user wants clean output.
-                    pass
 
                 # --- EXECUTE TOOLS ---
                 agent_output = ""
